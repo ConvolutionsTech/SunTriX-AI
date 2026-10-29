@@ -83,6 +83,29 @@ router.post("/", requireAuth, writable(Post, { protect: ["views"] }), async (req
   } catch (err) { next(err); }
 });
 
+// DELETE /posts/bulk — bulk delete
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids }: { ids: string[] } = req.body;
+    if (!ids?.length) return next(createError("IDs required", 400));
+    await Post.deleteMany({ _id: { $in: ids } });
+    await logAudit(req, "bulk_delete", "post", "", `${ids.length} posts`);
+    res.json({ message: `Deleted ${ids.length} posts` });
+  } catch (err) { next(err); }
+});
+
+// PUT /posts/bulk — bulk status update
+router.put("/bulk", requireAuth, bulkUpdate(["status", "featured", "category"]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
+    if (!ids?.length) return next(createError("IDs required", 400));
+    if (update.status === "published") update.publishedAt = new Date();
+    await Post.updateMany({ _id: { $in: ids } }, update, { runValidators: true });
+    await logAudit(req, "bulk_update", "post", "", `${ids.length} posts`);
+    res.json({ message: `Updated ${ids.length} posts` });
+  } catch (err) { next(err); }
+});
+
 // PUT /posts/:id — admin
 router.put("/:id", requireAuth, writable(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -110,28 +133,7 @@ router.delete("/:id", requireAuth, async (req: Request, res: Response, next: Nex
   } catch (err) { next(err); }
 });
 
-// DELETE /posts/bulk — bulk delete
-router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { ids }: { ids: string[] } = req.body;
-    if (!ids?.length) return next(createError("IDs required", 400));
-    await Post.deleteMany({ _id: { $in: ids } });
-    await logAudit(req, "bulk_delete", "post", "", `${ids.length} posts`);
-    res.json({ message: `Deleted ${ids.length} posts` });
-  } catch (err) { next(err); }
-});
 
-// PUT /posts/bulk — bulk status update
-router.put("/bulk", requireAuth, bulkUpdate(["status", "featured", "category"]), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
-    if (!ids?.length) return next(createError("IDs required", 400));
-    if (update.status === "published") update.publishedAt = new Date();
-    await Post.updateMany({ _id: { $in: ids } }, update, { runValidators: true });
-    await logAudit(req, "bulk_update", "post", "", `${ids.length} posts`);
-    res.json({ message: `Updated ${ids.length} posts` });
-  } catch (err) { next(err); }
-});
 
 // POST /posts/bulk/import — bulk import
 router.post("/bulk/import", requireAuth, bulkItems(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
