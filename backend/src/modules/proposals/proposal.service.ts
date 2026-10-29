@@ -39,13 +39,21 @@ export class ProposalService {
 
     const proposal = await this.proposalRepo.create({
       ...dto,
+      milestones: (dto.milestones || []).map((m, order) => ({ ...m, order })),
       proposalToken,
       expiresAt,
       status: "draft",
     });
 
     await TaskRequest.findByIdAndUpdate(dto.taskRequestId, { proposalId: proposal._id });
+    // Drafting a proposal means the request is being reviewed
+    const task = await this.taskService.getTaskById(dto.taskRequestId);
+    if (task.status === "new") await this.taskService.transitionStatus(dto.taskRequestId, "in_review", "admin", "Proposal drafted");
     return proposal;
+  }
+
+  async listForTask(taskRequestId: string): Promise<IProposal[]> {
+    return this.proposalRepo.findByTask(taskRequestId);
   }
 
   async getByToken(token: string): Promise<IProposal> {

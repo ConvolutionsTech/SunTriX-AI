@@ -13,6 +13,10 @@ export class ProposalRepository {
     return Proposal.findById(id);
   }
 
+  async findByTask(taskRequestId: string): Promise<IProposal[]> {
+    return Proposal.find({ taskRequestId }).sort({ createdAt: -1 });
+  }
+
   async atomicClaimForAcceptance(token: string): Promise<IProposal | null> {
     return Proposal.findOneAndUpdate(
       { proposalToken: token, status: { $in: ["sent", "changes_requested"] } },

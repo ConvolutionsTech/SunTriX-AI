@@ -1,5 +1,6 @@
 import { getSetting } from "../lib/configLoader";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
+import { toCents } from "../lib/money";
 
 // Shared client from the adapter (cached per key, bounded timeout)
 const getGroqClient = () => groqAdapter.getClient();
@@ -316,7 +317,8 @@ export async function draftProposalWithAI(data: {
   scopeOfWork:               string;
   deliverables:              string;
   timeline:                  string;
-  milestones:   { title: string; description: string; amount: number; dueWeek: number }[];
+  milestones:   { title: string; description: string; amount: number; dueWeek: number }[]; // amount in cents
+  totalAmount:               number; // cents — sum of milestone amounts
   pricingBreakdown:          string;
   revisionsPolicy:           string;
   clientResponsibilities:    string;
@@ -365,13 +367,15 @@ Return ONLY valid JSON. No markdown wrappers. No extra text.`,
     scopeOfWork:               ensureString(result.scopeOfWork),
     deliverables:              ensureString(result.deliverables),
     timeline:                  ensureString(result.timeline),
-    milestones:                (result.milestones as any[]) || [],
+    // The model answers in dollars; the API takes integer cents
+    milestones:                ((result.milestones as any[]) || []).map((m) => ({ ...m, amount: toCents(m.amount) })),
     pricingBreakdown:          ensureString(result.pricingBreakdown),
     revisionsPolicy:           ensureString(result.revisionsPolicy),
     clientResponsibilities:    ensureString(result.clientResponsibilities),
     supportAndWarranty:        ensureString(result.supportAndWarranty),
     paymentTerms:              ensureString(result.paymentTerms),
     nextSteps:                 ensureString(result.nextSteps),
+    totalAmount:               ((result.milestones as any[]) || []).reduce((sum, m) => sum + toCents(m.amount), 0),
   };
 }
 

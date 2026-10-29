@@ -16,7 +16,16 @@ router.post("/admin/ai-draft", requireAuth, validate(ProposalGenerateSchema), as
   }
 });
 
-// POST /proposals — create a proposal draft
+// GET /proposals/admin/by-task/:taskId — every proposal for a request, newest first
+router.get("/admin/by-task/:taskId", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ proposals: await proposalService.listForTask(req.params.taskId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /proposals — create a proposal draft (amounts in integer cents)
 router.post("/", requireAuth, validate(ProposalCreateSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const proposal = await proposalService.createProposal(req.body);

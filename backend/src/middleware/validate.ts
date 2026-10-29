@@ -155,12 +155,16 @@ export const ProposalCreateSchema = z.object({
   introduction: optStr,
   scopeItems: z.array(z.string()).optional().default([]),
   timeline: optStr,
+  // Money is integer cents (lib/money.ts)
+  totalAmount: z.number().int("totalAmount must be whole cents").min(100, "Total must be at least $1.00"),
+  currency: z.enum(["usd"]).optional().default("usd"),
+  expiresInDays: z.number().int().min(1).max(90).optional().default(14),
   milestones: z.array(z.object({
     title: shortStr("Milestone title"),
     description: optStr,
-    amount: z.number().min(1, "Milestone amount must be at least $1"),
+    amount: z.number().int("Milestone amount must be whole cents").min(100, "Milestone amount must be at least $1.00 (in cents)"),
     dueWeek: z.number().min(0).optional().default(0),
-  })).min(1, "At least one milestone is required"),
+  })).min(1, "At least one milestone is required").max(20, "At most 20 milestones"),
   terms: optStr,
   executiveSummary: optStr,
   scopeOfWork: optStr,
@@ -174,6 +178,12 @@ export const ProposalCreateSchema = z.object({
   clientEmail: email,
   clientName: optStr,
   aiDrafted: z.boolean().optional().default(false),
+}).superRefine((p, ctx) => {
+  const sum = p.milestones.reduce((total, m) => total + m.amount, 0);
+  if (sum !== p.totalAmount) {
+    ctx.addIssue({ code: "custom", path: ["milestones"], message: `Milestones add up to ${sum} cents but totalAmount is ${p.totalAmount}` });
+  }
+
 });
 
 // POST /contact/reply — recipient comes from the stored message, never the request
