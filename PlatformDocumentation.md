@@ -2037,7 +2037,7 @@ VITE_API_URL=https://suntrix-backend.onrender.com/v1
 **Config/setting change (no redeploy needed):**
 1. Go to Admin → Settings
 2. Update the value
-3. Change takes effect immediately (settings loaded into process.env in-memory cache)
+3. Change takes effect immediately on the instance that saved it, and on every other instance within ~15 s (they poll a settings version)
 
 ---
 

@@ -5,7 +5,7 @@ import AuditLog from "../models/AuditLog";
 import Proposal from "../models/Proposal";
 import Contract from "../models/Contract";
 import Campaign from "../models/Campaign";
-import { getSetting } from "./configLoader";
+import { getSetting, refreshSettingsIfChanged } from "./configLoader";
 import { logger } from "./logger";
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
@@ -44,6 +44,11 @@ export async function expireLifecycleDocuments(now = new Date()): Promise<void> 
 
 export function startScheduler(): void {
   const schedule = (expr: string, fn: () => unknown) => tasks.push(cron.schedule(expr, fn));
+
+  // ── Every 15 seconds: pick up settings changed on another instance ─────
+  schedule("*/15 * * * * *", () => {
+    refreshSettingsIfChanged().catch((err) => logger.error({ err }, "[Scheduler] Could not refresh settings"));
+  });
 
   // ── Every 5 minutes: finish post-payment work that failed the first time ───
   schedule("*/5 * * * *", async () => {

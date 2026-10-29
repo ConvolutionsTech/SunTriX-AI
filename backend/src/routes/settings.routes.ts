@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction, Request } from "express";
 import SystemSetting from "../models/SystemSetting";
 import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth";
-import { updateSettingCache, getSetting, isEnvOnlySetting } from "../lib/configLoader";
+import { updateSettingCache, getSetting, isEnvOnlySetting, bumpSettingsVersion, getSettingsStatus } from "../lib/configLoader";
 import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry";
 import AuditLog from "../models/AuditLog";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
@@ -119,6 +119,8 @@ async function saveSetting(key: string, rawValue: unknown, user: AuthRequest["us
     { upsert: true, runValidators: true }
   );
   updateSettingCache(key, value);
+  // Other instances poll this version and reload within ~15 s
+  await bumpSettingsVersion();
 
   // The change is already saved; an audit failure must not turn it into an error
   AuditLog.create({
@@ -133,6 +135,11 @@ async function saveSetting(key: string, rawValue: unknown, user: AuthRequest["us
 
   return { warning };
 }
+
+// ─── GET /v1/settings/status — which settings version this instance serves ─
+router.get("/status", requireAuth, requireAdmin, (_req: AuthRequest, res: Response) => {
+  res.json(getSettingsStatus());
+});
 
 // ─── PATCH /v1/settings/bulk — save an entire section at once ─────────────
 router.patch("/bulk", requireAuth, requireAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {

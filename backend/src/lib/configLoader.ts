@@ -8,10 +8,13 @@
  *
  * Services call getSetting(key, fallback). Precedence for runtime settings:
  * DB value → environment → fallback; an empty value at any layer counts as unset.
- * The cache is per process — other instances pick up changes on restart.
+ * The cache is per process; every instance polls SettingsVersion and reloads
+ * within ~15 s of a change made on any other instance.
  */
 
+import { randomUUID } from "crypto";
 import SystemSetting from "../models/SystemSetting";
+import SettingsVersion from "../models/SettingsVersion";
 import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry";
 import { logger } from "./logger";
 
@@ -19,7 +22,10 @@ import { logger } from "./logger";
 // Secrets and deployment parameters come from the environment only. DB rows for these
 // keys are ignored at load time, and the settings API can neither read nor write them.
 const ENV_ONLY_PREFIXES = ["JWT_", "STRIPE_", "CLOUDINARY_"];
-const ENV_ONLY_KEYS = new Set(["RESEND_API_KEY", "GROQ_API_KEY", "MONGODB_URI", "FRONTEND_URL", "NODE_ENV", "PORT", "TRUST_PROXY"]);
+const ENV_ONLY_KEYS = new Set([
+  "RESEND_API_KEY", "GROQ_API_KEY", "MONGODB_URI", "FRONTEND_URL", "NODE_ENV", "PORT", "TRUST_PROXY",
+  "LOG_LEVEL", "SENTRY_DSN", "METRICS_TOKEN", "GIT_SHA",
+]);
 
 export function isEnvOnlySetting(key: string): boolean {
   return ENV_ONLY_KEYS.has(key) || ENV_ONLY_PREFIXES.some((p) => key.startsWith(p));
@@ -30,6 +36,33 @@ export const DEFAULT_SYSTEM_SETTINGS = SETTINGS_REGISTRY;
 
 // ─── In-memory cache (key → value) ─────────────────────────────────────────
 const cache: Record<string, string> = {};
+const VERSION_ID = "settings";
+const instanceId = randomUUID();
+let loadedVersion: number | null = null;
+let loadedAt: Date | null = null;
+
+async function readVersion(): Promise<number> {
+  const doc = await SettingsVersion.findById(VERSION_ID).lean();
+  return doc?.version ?? 0;
+}
+
+/** Call after any settings write so other instances reload. */
+export async function bumpSettingsVersion(): Promise<number> {
+  const doc = await SettingsVersion.findByIdAndUpdate(VERSION_ID, { $inc: { version: 1 } }, { upsert: true, new: true }).lean();
+  return doc!.version;
+}
+
+/** Reload the cache if another instance changed settings since we last loaded. */
+export async function refreshSettingsIfChanged(): Promise<boolean> {
+  const current = await readVersion();
+  if (current === loadedVersion) return false;
+  await loadSettingsFromDB();
+  return true;
+}
+
+export function getSettingsStatus(): { instanceId: string; version: number | null; loadedAt: string | null } {
+  return { instanceId, version: loadedVersion, loadedAt: loadedAt?.toISOString() ?? null };
+}
 
 const isSet = (v: string | undefined | null): v is string => v !== undefined && v !== null && v !== "";
 
@@ -73,6 +106,8 @@ export async function loadSettingsFromDB(): Promise<void> {
   // 2. Load runtime settings. A failure here must not prevent the seeding above,
   //    and vice versa; callers fall back to env/defaults for anything not cached.
   try {
+    // Read the version first: a change landing mid-load bumps it again and triggers another reload.
+    const version = await readVersion();
     const settings = await SystemSetting.find({}).lean();
     let loaded = 0;
     for (const s of settings) {
@@ -90,7 +125,9 @@ export async function loadSettingsFromDB(): Promise<void> {
       cache[s.key] = s.value ?? "";
       loaded++;
     }
-    logger.info(`✅ Loaded ${loaded} runtime settings from DB`);
+    loadedVersion = version;
+    loadedAt = new Date();
+    logger.info(`✅ Loaded ${loaded} runtime settings from DB (version ${version})`);
   } catch (err) {
     logger.warn({ err }, "⚠️  Could not load settings from DB — using environment and defaults");
   }

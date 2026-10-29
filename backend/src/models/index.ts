@@ -16,6 +16,7 @@ import "./Post";
 import "./Pricing";
 import "./ProjectTracker";
 import "./Proposal";
+import "./SettingsVersion";
 import "./SystemSetting";
 import "./TaskRequest";
 import "./Team";
