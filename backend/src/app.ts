@@ -79,7 +79,9 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Please try again in 15 minutes." },
-  skip: (req) => !req.path.endsWith("/login") || req.method !== "POST",
+  // Express routing is case-insensitive and ignores a trailing slash, so normalise
+  // the same way — otherwise /login/ or /LOGIN would bypass the limit
+  skip: (req) => req.method !== "POST" || req.path.toLowerCase().replace(/\/+$/, "") !== "/login",
 });
 
 const formLimiter = rateLimit({

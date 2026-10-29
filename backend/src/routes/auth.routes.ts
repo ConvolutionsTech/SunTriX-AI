@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import Admin from "../models/Admin";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
@@ -8,6 +9,9 @@ import { validate, LoginSchema, RefreshTokenSchema } from "../middleware/validat
 
 const router = Router();
 
+// bcrypt hash (cost 12, same as Admin passwords) compared against when the email is unknown
+const TIMING_EQUALISER_HASH = "$2a$12$nlvWdtByaON4P.SkgUKqh.vuKPyXNAXEqObAh1rr4Ck361PYfguz2";
+
 // POST /auth/login
 router.post("/login", validate(LoginSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -15,12 +19,9 @@ router.post("/login", validate(LoginSchema), async (req: Request, res: Response,
     // Zod validate() enforces email format and password length
 
     const admin = await Admin.findOne({ email: email.toLowerCase() });
-    if (!admin) {
-      return next(createError("Invalid email or password", 401));
-    }
-
-    const isMatch = await admin.comparePassword(password);
-    if (!isMatch) {
+    // Always run one bcrypt comparison so response time doesn't reveal which emails exist
+    const isMatch = admin ? await admin.comparePassword(password) : await bcrypt.compare(password, TIMING_EQUALISER_HASH);
+    if (!admin || !isMatch) {
       return next(createError("Invalid email or password", 401));
     }
 
