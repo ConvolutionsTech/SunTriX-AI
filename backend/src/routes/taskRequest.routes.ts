@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { validate, TaskRequestSchema } from "../middleware/validate";
 import { formLimiter } from "../middleware/rateLimiters";
 import { logAudit } from "../lib/audit";
+import { pageParams } from "../middleware/pagination";
 
 const router = Router();
 
@@ -36,9 +37,10 @@ router.get("/track/:token", async (req: Request, res: Response, next: NextFuncti
 // GET /task-requests — admin only
 router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { status, limit = 100, skip = 0 } = req.query;
+    const { status } = req.query;
+    const { limit, skip } = pageParams(req, { defaultLimit: 100, maxLimit: 500 });
     const filter = status ? { status: String(status) } : {};
-    const result = await taskRequestService.getAllTasks(filter, Number(limit), Number(skip));
+    const result = await taskRequestService.getAllTasks(filter, limit, skip);
     res.json(result);
   } catch (err) {
     next(err);

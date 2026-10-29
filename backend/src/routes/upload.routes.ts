@@ -108,7 +108,7 @@ router.get("/", requireAuth, async (_req: Request, res: Response, _next: NextFun
   } catch (err: any) {
     // Fallback to MongoDB MediaAssets if Cloudinary call fails
     try {
-      const dbAssets = await MediaAsset.find({}).sort({ createdAt: -1 }).lean();
+      const dbAssets = await MediaAsset.find({}).sort({ createdAt: -1 }).limit(500).lean();
       return res.json(
         dbAssets.map((a: any) => ({
           _id: a._id.toString(),

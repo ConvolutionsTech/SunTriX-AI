@@ -4,6 +4,9 @@ import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 import { writable } from "../middleware/bodyPolicy";
 
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
+
 const router = Router();
 
 // GET /testimonials — public
@@ -11,7 +14,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
   try {
     const isAdmin = !!req.user;
     const filter = isAdmin ? {} : { status: "published" };
-    const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 });
+    const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 }).limit(MAX_LIST);
     res.json(testimonials);
   } catch (err) {
     next(err);

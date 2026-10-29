@@ -5,6 +5,9 @@ import { createError } from "../middleware/errorHandler";
 import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
+
 const router = Router();
 
 // GET /pricing — public (enabled only) or admin all
@@ -13,7 +16,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
     // Hidden/draft items only for a verified staff token — never for a bare Bearer header
     const showAll = !!req.user;
     const filter = showAll ? {} : { isVisible: true };
-    const plans = await Pricing.find(filter).sort({ order: 1 });
+    const plans = await Pricing.find(filter).sort({ order: 1 }).limit(MAX_LIST);
     res.json({ plans });
   } catch (err) { next(err); }
 });

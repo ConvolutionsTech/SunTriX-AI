@@ -18,6 +18,7 @@ function kickDispatcher(): void {
   });
 }
 import { formLimiter } from "../middleware/rateLimiters";
+import { pageParams, setTotal } from "../middleware/pagination";
 
 const router = Router();
 
@@ -109,7 +110,12 @@ router.post("/unsubscribe/:token", unsubscribe);
 // GET /newsletter — admin subscribers list
 router.get("/", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const subscribers = await Newsletter.find({ subscribed: true }).sort({ createdAt: -1 });
+    const { limit, skip } = pageParams(_req, { defaultLimit: 500, maxLimit: 1000 });
+    const [subscribers, total] = await Promise.all([
+      Newsletter.find({ subscribed: true }).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Newsletter.countDocuments({ subscribed: true }),
+    ]);
+    setTotal(res, total);
     res.json(subscribers);
   } catch (err) { next(err); }
 });

@@ -19,7 +19,7 @@ const tracker = {
 beforeEach(() => {
   apiRequest.mockReset();
   apiRequest.mockImplementation(async (url: string) => {
-    if (url === ENDPOINTS.TRACKER_ADMIN_LIST) return { data: { trackers: [tracker] }, error: null, status: 200 };
+    if (url.startsWith(ENDPOINTS.TRACKER_ADMIN_LIST)) return { data: { trackers: [tracker] }, error: null, status: 200 };
     if (url === ENDPOINTS.TRACKER_ADMIN_BY_ID("tr1")) return { data: { tracker }, error: null, status: 200 };
     return { data: {}, error: null, status: 200 };
   });

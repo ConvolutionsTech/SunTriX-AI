@@ -6,6 +6,9 @@ import { writable, idsBody, bulkItems, bulkUpdate } from "../middleware/bodyPoli
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
 
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
+
 const router = Router();
 
 /**
@@ -27,7 +30,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
     // Hidden/draft items only for a verified staff token — never for a bare Bearer header
     const showAll = !!req.user;
     const filter = showAll ? {} : { status: "published" };
-    const projects = await Portfolio.find(filter).sort({ order: 1, createdAt: -1 });
+    const projects = await Portfolio.find(filter).sort({ order: 1, createdAt: -1 }).limit(MAX_LIST);
     res.json(projects);
   } catch (err) { next(err); }
 });

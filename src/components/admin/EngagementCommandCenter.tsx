@@ -74,11 +74,10 @@ export const EngagementCommandCenter = ({
     setLoading(true);
     const [contracts, trackers] = await Promise.all([
       apiRequest<{ contracts: any[] }>(ENDPOINTS.CONTRACT_ADMIN_BY_TASK(request._id)),
-      apiRequest<{ trackers: any[] }>(ENDPOINTS.TRACKER_ADMIN_LIST),
+      apiRequest<{ trackers: any[] }>(ENDPOINTS.TRACKER_ADMIN_FOR_TASK(request._id)),
     ]);
     setContractData(contracts.data?.contracts?.[0] ?? null);
-    const match = trackers.data?.trackers?.find((t: any) => t.taskRequestId === request._id || t.taskRequestId?._id === request._id);
-    setTrackerData(match ?? null);
+    setTrackerData(trackers.data?.trackers?.[0] ?? null);
     setLoading(false);
   };
 

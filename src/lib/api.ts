@@ -234,6 +234,7 @@ export const ENDPOINTS = {
 
   // Project Tracker
   TRACKER_ADMIN_LIST:  `${BASE_URL}/tracker/admin/list`,
+  TRACKER_ADMIN_FOR_TASK: (taskId: string) => `${BASE_URL}/tracker/admin/list?taskRequestId=${taskId}`,
   TRACKER_ADMIN_BY_ID: (id: string) => `${BASE_URL}/tracker/admin/${id}`,
   TRACKER_ADMIN_AUDIT: (id: string) => `${BASE_URL}/tracker/admin/${id}/audit`,
   TRACKER_ADMIN_PHASE_ADVANCE:      (id: string) => `${BASE_URL}/tracker/admin/${id}/phase/advance`,

@@ -11,6 +11,7 @@ import { outboxStatus, requeueEmail } from "../lib/emailOutbox";
 import { aiUsageSummary } from "../lib/aiBudget";
 import { logAudit } from "../lib/audit";
 import { createError } from "../middleware/errorHandler";
+import { clampedInt } from "../middleware/pagination";
 
 const router = Router();
 
@@ -59,7 +60,7 @@ router.get("/notifications", requireAuth, async (_req: Request, res: Response, n
 // GET /admin/activity — comprehensive activity overview data
 router.get("/activity", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const days = parseInt(req.query.days as string) || 30;
+    const days = clampedInt(req.query.days, 1, 365, 30);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const prevSince = new Date(Date.now() - days * 2 * 24 * 60 * 60 * 1000);
 

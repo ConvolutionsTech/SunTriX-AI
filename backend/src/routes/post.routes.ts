@@ -6,6 +6,7 @@ import { writable, idsBody, bulkItems, bulkUpdate } from "../middleware/bodyPoli
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
 import sanitizeHtml from "sanitize-html";
+import { pageParams } from "../middleware/pagination";
 
 const sanitizeOptions = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat([
@@ -25,7 +26,8 @@ const router = Router();
 // GET /posts — public: published posts with filters
 router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { tag, category, featured, limit = 20, skip = 0, all } = req.query;
+    const { tag, category, featured, all } = req.query;
+    const { limit, skip } = pageParams(req, { defaultLimit: 20, maxLimit: 100 });
     const filter: Record<string, unknown> = req.user && all === "true" ? {} : { status: "published" };
     if (tag) filter.tags = tag;
     if (category) filter.category = category;
@@ -33,8 +35,8 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
 
     const posts = await Post.find(filter)
       .sort({ publishedAt: -1, createdAt: -1 })
-      .limit(Number(limit))
-      .skip(Number(skip))
+      .limit(limit)
+      .skip(skip)
       .select("-content"); // Exclude full content in list view
 
     const total = await Post.countDocuments(filter);

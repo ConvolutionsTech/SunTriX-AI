@@ -16,8 +16,11 @@ import {
   sendTrackerClientActionToAdminEmail 
 } from "../services/email";
 import { getSetting } from "../lib/configLoader";
+import { pageParams, setTotal } from "../middleware/pagination";
 
 const router = Router();
+const MAX_TRACKER_AUDIT = 1000;
+const MAX_TRACKER_FILES = 200;
 const getAppUrl = () => getSetting("FRONTEND_URL", "http://localhost:5173");
 const getClientPortalUrl = (token: string) => `${getAppUrl()}/client/project/${token}`;
 const getAdminUrl = () => `${getAppUrl()}/admin/tasks`;
@@ -25,17 +28,30 @@ const getAdminUrl = () => `${getAppUrl()}/admin/tasks`;
 // ─── HELPER ────────────────────────────────────────────────────────
 const writeAudit = async (tracker: any, action: string, actor: string, role: "Admin"|"Client"|"System", metadata?: any) => {
   tracker.auditLog.push({ action, actor, actorRole: role, timestamp: new Date(), metadata });
+  // The embedded log keeps the latest entries only, so the document can't grow without bound
+  if (tracker.auditLog.length > MAX_TRACKER_AUDIT) tracker.auditLog.splice(0, tracker.auditLog.length - MAX_TRACKER_AUDIT);
 };
 
 // ─── ADMIN ENDPOINTS ───────────────────────────────────────────────
 
-router.get("/admin/list", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+// Summaries only (no updates/files/audit/messages); ?taskRequestId= finds one engagement's tracker
+router.get("/admin/list", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const trackers = await ProjectTracker.find()
-      .populate("taskRequestId", "name projectTitle company service status")
-      .sort({ createdAt: -1 })
-      .lean();
-    res.json({ trackers });
+    const filter: Record<string, unknown> = {};
+    if (typeof req.query.taskRequestId === "string" && /^[a-f\d]{24}$/i.test(req.query.taskRequestId)) filter.taskRequestId = req.query.taskRequestId;
+    const { limit, skip } = pageParams(req, { defaultLimit: 200, maxLimit: 500 });
+    const [trackers, total] = await Promise.all([
+      ProjectTracker.find(filter)
+        .select("-updates -files -auditLog -messages")
+        .populate("taskRequestId", "name projectTitle company service status")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ProjectTracker.countDocuments(filter),
+    ]);
+    setTotal(res, total);
+    res.json({ trackers, total });
   } catch (err) { next(err); }
 });
 
@@ -472,6 +488,9 @@ router.post("/admin/:id/file/upload", requireAuth, async (req: Request, res: Res
 
       const tracker = await ProjectTracker.findById(req.params.id);
       if (!tracker) return next(createError("Tracker not found", 404));
+      if (tracker.files.length >= MAX_TRACKER_FILES) {
+        return next(createError(`This project already has ${MAX_TRACKER_FILES} files — remove some before uploading more`, 409));
+      }
 
       const file = (req as any).file;
       const folder = `projects/${tracker.taskRequestId}/files`;

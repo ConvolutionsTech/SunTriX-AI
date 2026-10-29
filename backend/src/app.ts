@@ -70,6 +70,7 @@ app.use(
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["X-Total-Count", "X-Request-Id"],
     credentials: true,
   })
 );

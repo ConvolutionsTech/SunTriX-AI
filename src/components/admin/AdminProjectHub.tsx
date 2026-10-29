@@ -53,11 +53,9 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
   const fetchTracker = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await apiRequest<{ trackers: any[] }>(ENDPOINTS.TRACKER_ADMIN_LIST);
+      const { data } = await apiRequest<{ trackers: any[] }>(ENDPOINTS.TRACKER_ADMIN_FOR_TASK(taskId));
       if (data?.trackers) {
-        const found = data.trackers.find(
-          (t: any) => t.taskRequestId?._id === taskId || t.taskRequestId === taskId
-        );
+        const found = data.trackers[0];
         if (found) {
           const { data: detail } = await apiRequest<{ tracker: any }>(ENDPOINTS.TRACKER_ADMIN_BY_ID(found._id));
           if (detail?.tracker) {

@@ -8,6 +8,7 @@ import { logAudit } from "../lib/audit";
 import { sendContactNotification } from "../services/email";
 import { logger } from "../lib/logger";
 import { formLimiter } from "../middleware/rateLimiters";
+import { pageParams, setTotal } from "../middleware/pagination";
 
 const router = Router();
 
@@ -43,7 +44,12 @@ router.post("/", formLimiter(), validate(ContactSchema), async (req: Request, re
 router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filter = req.query.unread === "true" ? { read: false } : {};
-    const messages = await ContactMessage.find(filter).sort({ createdAt: -1 });
+    const { limit, skip } = pageParams(req, { defaultLimit: 200, maxLimit: 500 });
+    const [messages, total] = await Promise.all([
+      ContactMessage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      ContactMessage.countDocuments(filter),
+    ]);
+    setTotal(res, total);
     res.json(messages);
   } catch (err) {
     next(err);
