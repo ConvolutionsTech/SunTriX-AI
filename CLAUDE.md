@@ -71,3 +71,4 @@ Notes:
 
 - `PlatformDocumentation.md` — detailed platform/module/deployment reference.
 - `PaymentFlow.md` — end-to-end proposal → contract → payment → tracker flow.
+- `RUNBOOK.md` — backups/restore, environments, deploy & rollback (SHA-tagged images from CI), incident checklists, secret rotation.

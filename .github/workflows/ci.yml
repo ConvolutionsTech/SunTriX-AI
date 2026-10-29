@@ -79,3 +79,24 @@ jobs:
             if (process.getuid() === 0) { console.error('runs as root'); process.exit(1); }
             if (fs.existsSync('dist/test')) { console.error('dist/test present'); process.exit(1); }
           "
+
+  publish:
+    name: Publish backend image (main only)
+    # Every green commit on main becomes ghcr.io/<owner>/suntrix-api:<sha> (+ latest);
+    # roll back by redeploying an earlier SHA tag (see RUNBOOK.md)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [frontend, backend, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build, tag and push
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/suntrix-api"
+          docker build --build-arg GIT_SHA=${{ github.sha }} -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"

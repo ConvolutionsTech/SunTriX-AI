@@ -21,6 +21,8 @@ FROM node:22-alpine
 
 ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.revision=$GIT_SHA
+# Exposed to the app (Sentry release, logs)
+ENV GIT_SHA=$GIT_SHA
 
 ENV NODE_ENV=production
 
