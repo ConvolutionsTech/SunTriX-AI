@@ -70,6 +70,8 @@ const BlogDetail = () => {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [related, setRelated] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
 
   useSEO({
@@ -80,32 +82,56 @@ const BlogDetail = () => {
   });
 
   useEffect(() => {
+    // A response for a slug the reader has already left must not overwrite the current article
+    let stale = false;
     const fetch_ = async () => {
       setLoading(true);
-      const { data } = await apiRequest<BlogPost>(ENDPOINTS.BLOG_BY_SLUG(slug!));
+      setLoadError(null);
+      const { data, error, status } = await apiRequest<BlogPost>(ENDPOINTS.BLOG_BY_SLUG(slug!));
+      if (stale) return;
       if (data && data._id) {
         setPost(data);
         // Fetch related posts
         const { data: allData } = await apiRequest<{ posts: BlogPost[] }>(ENDPOINTS.BLOG_LIST);
+        if (stale) return;
         if (allData?.posts) {
           const others = allData.posts.filter(
             (p) => p.slug !== slug && p.status === "published" && p.category === data.category
           ).slice(0, 3);
           setRelated(others);
         }
-      } else {
+      } else if (status === 404 || (!error && !data)) {
         navigate("/blog", { replace: true });
+      } else {
+        // Network or server trouble: offer a retry instead of silently leaving the page
+        setLoadError(error ?? "Couldn't load this article.");
       }
       setLoading(false);
     };
     if (slug) fetch_();
-  }, [slug]);
+    return () => {
+      stale = true;
+    };
+  }, [slug, attempt]);
 
   const copyUrl = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (!loading && loadError) {
+    return (
+      <Layout>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-6" role="alert">
+          <p className="text-lg text-foreground">{loadError}</p>
+          <button onClick={() => setAttempt((n) => n + 1)} className="text-primary underline hover:text-primary/90">
+            Try again
+          </button>
+        </div>
+      </Layout>
+    );
+  }
 
   if (loading) {
     return (

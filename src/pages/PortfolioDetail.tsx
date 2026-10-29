@@ -70,21 +70,49 @@ const PortfolioDetail = () => {
   const [caseStudy, setCaseStudy] = useState<CaseStudy | null>(null);
   const [related, setRelated] = useState<PortfolioProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!slug) return;
-    apiRequest<PortfolioProject>(ENDPOINTS.PORTFOLIO_BY_SLUG(slug)).then(({ data: p }) => {
-      if (!p) { setLoading(false); return; }
+    // Ignore responses for a project the visitor has already navigated away from
+    let stale = false;
+    setLoading(true);
+    setLoadError(null);
+    apiRequest<PortfolioProject>(ENDPOINTS.PORTFOLIO_BY_SLUG(slug)).then(({ data: p, error, status }) => {
+      if (stale) return;
+      if (!p) {
+        setProject(null);
+        if (error && status !== 404) setLoadError(error);
+        setLoading(false);
+        return;
+      }
       setProject(p);
       setLoading(false);
       // Fetch related projects
       apiRequest<PortfolioProject[]>(ENDPOINTS.PORTFOLIO_LIST).then(({ data: all }) => {
-        if (all) setRelated(all.filter((r) => r.category === p.category && r._id !== p._id).slice(0, 3));
+        if (!stale && Array.isArray(all)) setRelated(all.filter((r) => r.category === p.category && r._id !== p._id).slice(0, 3));
       });
     });
-  }, [slug]);
+    return () => {
+      stale = true;
+    };
+  }, [slug, attempt]);
 
   if (loading) return <PortfolioDetailSkeleton />;
+
+  if (loadError) {
+    return (
+      <Layout>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-6" role="alert">
+          <p className="text-lg text-foreground">{loadError}</p>
+          <button onClick={() => setAttempt((n) => n + 1)} className="text-primary underline hover:text-primary/90">
+            Try again
+          </button>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!project) {
     return (
