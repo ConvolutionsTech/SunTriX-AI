@@ -12,7 +12,9 @@
     "seed:admin": "ts-node src/scripts/seedAdmin.ts",
     "seed:admin:prod": "node dist/scripts/seedAdmin.js",
     "db:sync-indexes": "ts-node src/scripts/syncIndexes.ts",
-    "db:sync-indexes:prod": "node dist/scripts/syncIndexes.js"
+    "db:sync-indexes:prod": "node dist/scripts/syncIndexes.js",
+    "media:reconcile": "ts-node src/scripts/reconcileMedia.ts",
+    "media:reconcile:prod": "node dist/scripts/reconcileMedia.js"
   },
   "dependencies": {
     "@sentry/node": "^9.47.2",

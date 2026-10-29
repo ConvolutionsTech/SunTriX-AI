@@ -54,7 +54,7 @@ describe("audit coverage (T-OPA-12)", () => {
   it("media deletion and tracker admin actions are audited; failed requests are not", async () => {
     await admin();
     vi.spyOn(cloudinaryService, "deleteAsset").mockResolvedValue(undefined as never);
-    const id = Buffer.from("folder/file").toString("base64");
+    const id = Buffer.from("suntrix/file").toString("base64");
     expect((await request(app).delete(`/v1/upload/${id}`).set(auth)).status).toBe(200);
     await rows(1, { entity: "media", action: "delete" });
 

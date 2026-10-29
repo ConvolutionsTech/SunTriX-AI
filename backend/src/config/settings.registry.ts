@@ -73,6 +73,7 @@ export const SETTINGS_REGISTRY: SettingDef[] = [
 
   // ─── Storage ────────────────────────────────────────────────────
   { key: "UPLOAD_DEFAULT_FOLDER", section: "storage", label: "Default Upload Folder", type: "text", default: "", schema: blankOr(text(100).regex(/^[\w/-]+$/, "Letters, numbers, - _ / only")) },
+  { key: "UPLOAD_ALLOW_SVG", section: "storage", label: "Allow SVG uploads", description: "SVGs can carry scripts; only enable if every uploader is trusted", type: "toggle", default: "false", schema: toggle },
   { key: "UPLOAD_MAX_SIZE_MB", section: "storage", label: "Max Upload Size (MB)", type: "number", default: "", schema: intIn(1, 100) },
 
   // ─── Brand ──────────────────────────────────────────────────────

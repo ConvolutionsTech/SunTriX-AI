@@ -575,6 +575,8 @@ Not to be confused with "clients" as in people — this is for displaying client
 
 ---
 
+**Library and safety rules.** The media library is read from the `MediaAsset` collection (paged, total in `X-Total-Count`), not from Cloudinary's API. Each upload is recorded with a content hash and a scope: `public` for the library and `project:<taskRequestId>` for client files uploaded in the Project Hub. Re-uploading the same bytes within a scope reuses the existing file; client files never appear in, and can't be deleted from, the library. Library uploads must go to `UPLOAD_DEFAULT_FOLDER` (default `suntrix`) or its `videos`, `docs`, `blog`, `portfolio`, `team`, `clients` or `images` subfolders. HTML, SVG, XML and script files are refused (SVG can be allowed with **Allow SVG uploads** in Settings → Storage). Deletes take the asset id and use the right Cloudinary resource type, also in bulk. After upgrading, run `npm run db:sync-indexes:prod` and then `npm run media:reconcile:prod` once, to list files uploaded before the library was database-backed.
+
 ### 4.17 AI Chat Module (Groq)
 
 **Purpose:** Public AI chatbot widget on the website homepage that answers visitor questions about services, pricing, and portfolio.

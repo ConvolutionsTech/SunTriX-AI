@@ -200,7 +200,7 @@ export const ENDPOINTS = {
   UPLOAD_VIDEO: `${BASE_URL}/upload/video`,
   UPLOAD_DOCUMENT: `${BASE_URL}/upload/document`,
   UPLOAD_LIST: `${BASE_URL}/upload`,
-  UPLOAD_DELETE: (publicId: string) => `${BASE_URL}/upload/${btoa(publicId)}`,
+  UPLOAD_DELETE: (assetId: string) => `${BASE_URL}/upload/${encodeURIComponent(assetId)}`,
   UPLOAD_BULK_DELETE: `${BASE_URL}/upload/bulk`,
 
   // Payments (Stripe)

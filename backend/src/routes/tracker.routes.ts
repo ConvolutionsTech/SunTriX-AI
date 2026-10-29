@@ -498,9 +498,9 @@ router.post("/admin/:id/file/upload", requireAuth, async (req: Request, res: Res
 
       let result;
       if (isImage) {
-        result = await uploadImage(file.buffer, folder);
+        result = await uploadImage(file.buffer, folder, undefined, `project:${tracker.taskRequestId}`);
       } else {
-        result = await uploadDocument(file.buffer, file.originalname, folder);
+        result = await uploadDocument(file.buffer, file.originalname, folder, `project:${tracker.taskRequestId}`);
       }
 
       tracker.files.push({

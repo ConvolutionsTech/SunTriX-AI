@@ -98,10 +98,11 @@ export const AdminMedia = () => {
     fetchAssets();
   };
 
-  const handleDelete = async (publicId: string) => {
+  const handleDelete = async (assetId: string) => {
     if (!window.confirm("Delete this digital asset permanently from Cloudinary?")) return;
-    await apiRequest(ENDPOINTS.UPLOAD_DELETE(publicId), { method: "DELETE" });
-    if (selectedAsset?.publicId === publicId) setSelectedAsset(null);
+    const { error } = await apiRequest(ENDPOINTS.UPLOAD_DELETE(assetId), { method: "DELETE" });
+    if (error) alert(error);
+    if (selectedAsset?._id === assetId) setSelectedAsset(null);
     fetchAssets();
   };
 
@@ -109,7 +110,7 @@ export const AdminMedia = () => {
     if (!window.confirm(`Delete ${selectedIds.size} selected assets permanently?`)) return;
     const toDelete = assets.filter((a) => selectedIds.has(a._id));
     for (const a of toDelete) {
-      await apiRequest(ENDPOINTS.UPLOAD_DELETE(a.publicId), { method: "DELETE" });
+      await apiRequest(ENDPOINTS.UPLOAD_DELETE(a._id), { method: "DELETE" });
     }
     setSelectedIds(new Set());
     fetchAssets();
@@ -462,7 +463,7 @@ export const AdminMedia = () => {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(asset.publicId); }}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(asset._id); }}
                       className="p-2 rounded-lg bg-destructive/90 text-white hover:bg-destructive transition-colors shadow-xs"
                       title="Delete asset"
                     >
@@ -554,7 +555,7 @@ export const AdminMedia = () => {
                           {copiedId === asset._id ? "Copied!" : "Copy URL"}
                         </button>
                         <button
-                          onClick={() => handleDelete(asset.publicId)}
+                          onClick={() => handleDelete(asset._id)}
                           className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -664,7 +665,7 @@ export const AdminMedia = () => {
                 </a>
 
                 <button
-                  onClick={() => handleDelete(selectedAsset.publicId)}
+                  onClick={() => handleDelete(selectedAsset._id)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-500 text-xs font-semibold hover:bg-red-500/20 transition-all"
                 >
                   <Trash2 className="h-4 w-4" /> Delete Asset Permanently

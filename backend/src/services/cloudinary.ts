@@ -31,14 +31,28 @@ function getMaxFileSizeBytes(): number {
   return mb * 1024 * 1024;
 }
 
-// ─── Multer — reads max size dynamically (allows all file types) ───────────
+/** Legacy rows predate scopes and are public. */
+function scopeFilter(scope: string) {
+  return scope === "public" ? { $in: ["public", null] } : scope;
+}
+
+// Files a browser would run as active content if opened from the Cloudinary URL
+const ACTIVE_CONTENT = /\.(html?|xhtml|svg|js|mjs|xml)$/i;
+const ACTIVE_MIME = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/javascript|application\/javascript|application\/xml|text\/xml)$/i;
+
+export function isActiveContent(file: { originalname: string; mimetype?: string }): boolean {
+  if (getSetting("UPLOAD_ALLOW_SVG", "false") === "true" && (/\.svg$/i.test(file.originalname) || file.mimetype === "image/svg+xml")) return false;
+  return ACTIVE_CONTENT.test(file.originalname) || ACTIVE_MIME.test(file.mimetype ?? "");
+}
+
+// ─── Multer — reads max size dynamically; refuses HTML/SVG/script files ─────
 export const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     get fileSize() { return getMaxFileSizeBytes(); },
   },
-  fileFilter(_req, _file, cb) {
-    // Allow all file types per platform requirement
+  fileFilter(_req, file, cb) {
+    if (isActiveContent(file)) return cb(Object.assign(new Error("HTML, SVG and script files can't be uploaded"), { statusCode: 400 }));
     cb(null, true);
   },
 });
@@ -47,14 +61,15 @@ export const upload = multer({
 export async function uploadImage(
   buffer: Buffer,
   folder?: string,
-  publicId?: string
+  publicId?: string,
+  scope = "public"
 ): Promise<{ url: string; publicId: string; width?: number; height?: number; format?: string }> {
   applyConfig();
   const targetFolder = folder || getDefaultFolder();
   const hash = getFileHash(buffer);
 
   // DB Deduplication check
-  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "image" });
+  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "image", scope: scopeFilter(scope) });
   if (existingAsset) {
     return { 
       url: existingAsset.url, 
@@ -87,7 +102,8 @@ export async function uploadImage(
           bytes: result.bytes,
           width: result.width,
           height: result.height,
-          folder: targetFolder
+          folder: targetFolder,
+          scope
         });
       } catch (dbErr) {
         logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");
@@ -108,14 +124,15 @@ export async function uploadImage(
 // ─── Upload video ──────────────────────────────────────────────────────────
 export async function uploadVideo(
   buffer: Buffer,
-  folder?: string
+  folder?: string,
+  scope = "public"
 ): Promise<{ url: string; publicId: string; width?: number; height?: number; format?: string }> {
   applyConfig();
   const targetFolder = folder || `${getDefaultFolder()}/videos`;
   const hash = getFileHash(buffer);
 
   // DB Deduplication check
-  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "video" });
+  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "video", scope: scopeFilter(scope) });
   if (existingAsset) {
     return { 
       url: existingAsset.url, 
@@ -143,7 +160,8 @@ export async function uploadVideo(
             bytes: result.bytes,
             width: result.width,
             height: result.height,
-            folder: targetFolder
+            folder: targetFolder,
+            scope
           });
         } catch (dbErr) {
           logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");
@@ -166,7 +184,8 @@ export async function uploadVideo(
 export async function uploadDocument(
   buffer: Buffer,
   originalName: string,
-  folder?: string
+  folder?: string,
+  scope = "public"
 ): Promise<{ url: string; publicId: string; format?: string }> {
   applyConfig();
   const targetFolder = folder || `${getDefaultFolder()}/docs`;
@@ -174,7 +193,7 @@ export async function uploadDocument(
   const ext = path.extname(originalName);
 
   // DB Deduplication check
-  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "raw" });
+  const existingAsset = await MediaAsset.findOne({ hash, resourceType: "raw", scope: scopeFilter(scope) });
   if (existingAsset) {
     return { 
       url: existingAsset.url, 
@@ -205,7 +224,8 @@ export async function uploadDocument(
             format: result.format || ext.replace(".", ""),
             bytes: result.bytes,
             folder: targetFolder,
-            originalName
+            originalName,
+            scope
           });
         } catch (dbErr) {
           logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");

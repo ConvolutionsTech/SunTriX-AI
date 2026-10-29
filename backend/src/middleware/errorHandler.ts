@@ -27,6 +27,7 @@ function normalise(err: any): Normalised {
     return { status: 409, message: field ? `That ${field} is already in use` : "Duplicate value", code: "DUPLICATE" };
   }
   if (typeof err?.message === "string" && err.message.startsWith("CORS")) return { status: 403, message: "Origin not allowed", code: "CORS" };
+  if (err?.name === "MulterError") return { status: err.code === "LIMIT_FILE_SIZE" ? 413 : 400, message: err.message, code: err.code };
   if (err?.type === "entity.too.large") return { status: 413, message: "Request body too large", code: "TOO_LARGE" };
   if (err?.type === "entity.parse.failed") return { status: 400, message: "Malformed JSON body", code: "BAD_JSON" };
   // Our AppErrors and other errors that already carry an HTTP status (body-parser, http-errors)
