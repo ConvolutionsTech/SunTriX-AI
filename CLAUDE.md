@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 SunTriX AI is an agency website + admin CMS + client engagement platform. Two independent packages:
 
 - **Frontend** (repo root): Vite + React 18 + TypeScript + shadcn/ui + Tailwind + TanStack Query. Deployed to Vercel as an SPA (`vercel.json` rewrites everything to `index.html`). Originally scaffolded with Lovable.
-- **Backend** (`backend/`): Express + Mongoose (MongoDB) + TypeScript (CommonJS). Deployed via `backend/Dockerfile` (`node:22-alpine`, non-root, `npm ci`, port 4000, `/health` healthcheck). Node 22 everywhere (`.nvmrc`, `engines`).
+- **Backend** (`backend/`): Express + Mongoose (MongoDB) + TypeScript (CommonJS). Deployed via `backend/Dockerfile` (`node:22-alpine`, non-root, `npm ci`, port 4000, healthcheck on `/ready` — DB-aware; `/health` is liveness only; SIGTERM drains and exits within 10 s). Node 22 everywhere (`.nvmrc`, `engines`).
 
 ## Commands
 

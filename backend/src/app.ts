@@ -36,7 +36,8 @@ import paymentRoutes from "./routes/payment.routes";
 import settingsRoutes from "./routes/settings.routes";
 import proposalRoutes from "./routes/proposal.routes";
 import contractRoutes from "./routes/contract.routes";
-import { startScheduler } from "./lib/scheduler";
+import { startScheduler, failInterruptedCampaigns } from "./lib/scheduler";
+import { checkReadiness, registerProcessHandlers } from "./lib/shutdown";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -78,6 +79,8 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
+  // Orchestrator probes must never be throttled
+  skip: (req) => req.path === "/health" || req.path === "/ready",
 });
 
 const authLimiter = rateLimit({
@@ -114,6 +117,7 @@ app.use(globalLimiter);
 
 // ─── Maintenance Mode ────────────────────────────────────────────
 const MAINTENANCE_BYPASS_PREFIXES = [
+  "/ready",
   "/health",
   "/v1/auth",
   "/v1/admin",
@@ -167,8 +171,18 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(mongoSanitize({ replaceWith: "_" }));
 
 // ─── Health Check ─────────────────────────────────────────────────
+// Liveness: the process is up. Readiness: it can serve traffic (DB reachable, not draining).
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
+  res.json({ status: "ok" });
+});
+
+app.get("/ready", async (_req, res) => {
+  const result = await checkReadiness();
+  if (result.ready) {
+    res.json({ status: "ready" });
+  } else {
+    res.status(503).json({ status: "not_ready", reason: result.reason });
+  }
 });
 
 // ─── API Routes ──────────────────────────────────────────────────
@@ -218,9 +232,11 @@ async function start() {
   // Load all settings into process.env before any route runs
   await loadSettingsFromDB();
   startScheduler();
-  app.listen(PORT, () => {
+  failInterruptedCampaigns().catch((err) => logger.error({ err }, "Could not check for interrupted campaigns"));
+  const server = app.listen(PORT, () => {
     logger.info({ port: PORT, env: process.env.NODE_ENV }, `SunTriX API listening on :${PORT}`);
   });
+  registerProcessHandlers(server);
 }
 
 if (process.env.NODE_ENV !== "test") {
