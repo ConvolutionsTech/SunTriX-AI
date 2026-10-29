@@ -10,6 +10,7 @@ const router = Router();
 
 // ─── GET /v1/settings/public — no auth — safe config for frontend ─
 const PUBLIC_KEYS = [
+  "AI_ENABLED",
   "CHATBOT_ENABLED",
   "CHATBOT_NAME",
   "CHATBOT_WELCOME_MESSAGE",

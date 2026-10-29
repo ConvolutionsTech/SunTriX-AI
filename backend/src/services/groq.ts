@@ -1,28 +1,21 @@
-import Groq from "groq-sdk";
 import { getSetting } from "../lib/configLoader";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
 
-// ─── Lazy client factory ────────────────────────────────────────────────────
-// Creates a new Groq instance reading the CURRENT api key each call.
-// This means the admin can rotate the key and it takes effect immediately.
-function getGroqClient(): Groq {
-  const apiKey = getSetting("GROQ_API_KEY");
-  if (!apiKey) throw new Error("GROQ_API_KEY is not configured. Set it in Admin → Settings → AI.");
-  return new Groq({ apiKey, dangerouslyAllowBrowser: true });
-}
+// Shared client from the adapter (cached per key, bounded timeout)
+const getGroqClient = () => groqAdapter.getClient();
 
 // ─── Dynamic model + param helpers ────────────────────────────────────────
 const getChatModel     = () => getSetting("GROQ_CHAT_MODEL",     "llama-3.1-8b-instant");
 const getExtractModel  = () => getSetting("GROQ_EXTRACT_MODEL",  "llama-3.1-8b-instant");
 const getEmailTemp     = () => parseFloat(getSetting("GROQ_EMAIL_TEMPERATURE",   "0.4"));
-const getEmailTokens   = () => parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS",      "2048"));
+const getEmailTokens   = () => parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS",      "4096"));
 
 // ─── Dynamic system prompt ─────────────────────────────────────────────────
 // Admin can either supply a full custom prompt via CHATBOT_SYSTEM_PROMPT,
 // or let the system auto-build one from brand settings.
 function buildSystemPrompt(): string {
-  const custom = getSetting("CHATBOT_SYSTEM_PROMPT");
-  if (custom && custom.trim().length > 50) return custom.trim();
+  const custom = getSetting("CHATBOT_SYSTEM_PROMPT").trim();
+  if (custom) return custom;
 
   const name          = getSetting("BRAND_NAME",             "SunTriX AI Solutions");
   const email         = getSetting("BRAND_EMAIL",            "hello@suntrix.com");
@@ -443,7 +436,7 @@ End with a signature block for both parties. For the client, include a line: "Cl
       },
     ],
     temperature: 0.3,
-    max_tokens: parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS", "4096")),
+    max_tokens: getEmailTokens(),
   });
 
   return completion.choices[0]?.message?.content || "Contract generation failed. Please contact us directly.";

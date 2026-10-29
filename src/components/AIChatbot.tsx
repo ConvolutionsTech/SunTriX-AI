@@ -46,6 +46,7 @@ const clearChatHistory = () => {
 
 interface PublicSettings {
   CHATBOT_ENABLED: string;
+  AI_ENABLED?: string;
   CHATBOT_NAME: string;
   CHATBOT_WELCOME_MESSAGE: string;
   CHATBOT_MAX_WORDS: string;
@@ -137,7 +138,7 @@ const AIChatbot = () => {
   if (!configLoaded) return null;
 
   // Respect CHATBOT_ENABLED setting from admin
-  if (config.CHATBOT_ENABLED === "false") return null;
+  if (config.CHATBOT_ENABLED === "false" || config.AI_ENABLED === "false") return null;
 
   const dynamicBrandName = companyInfo.name || config.BRAND_NAME;
   const defaultBotName = dynamicBrandName.includes("SunTriX") ? "SunTriX AI" : `${dynamicBrandName} AI`;

@@ -51,11 +51,20 @@ function inferPlanEligibility(id: string): "Available on Groq" | "Free-plan elig
   return "Available on Groq";
 }
 
+// A hung Groq call must not hold a public request open for minutes
+const GROQ_TIMEOUT_MS = 20_000;
+
 export class GroqAdapter {
-  private getClient(): Groq {
+  private client: { key: string; instance: Groq } | null = null;
+
+  /** One client per API key, with a bounded timeout and a single retry. */
+  getClient(): Groq {
     const apiKey = getSetting("GROQ_API_KEY");
-    if (!apiKey) throw new Error("GROQ_API_KEY is missing in system settings.");
-    return new Groq({ apiKey, dangerouslyAllowBrowser: true });
+    if (!apiKey) throw new Error("GROQ_API_KEY is not set in the environment.");
+    if (this.client?.key !== apiKey) {
+      this.client = { key: apiKey, instance: new Groq({ apiKey, timeout: GROQ_TIMEOUT_MS, maxRetries: 1 }) };
+    }
+    return this.client.instance;
   }
 
   /**

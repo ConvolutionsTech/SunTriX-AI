@@ -52,7 +52,7 @@ export const SETTINGS_REGISTRY: SettingDef[] = [
   { key: "CHATBOT_ENABLED", section: "chatbot", label: "Enable Website Chatbot", type: "toggle", default: "true", schema: toggle },
   { key: "CHATBOT_NAME", section: "chatbot", label: "Chatbot Name", type: "text", default: "SunTriX AI Assistant", schema: text(80) },
   { key: "CHATBOT_WELCOME_MESSAGE", section: "chatbot", label: "Welcome Message", type: "text", default: "Hello! How can SunTriX help build or scale your AI solutions today?", schema: text(500) },
-  { key: "CHATBOT_SYSTEM_PROMPT", section: "chatbot", label: "Custom System Prompt", type: "textarea", default: "You are SunTriX AI Assistant, an elite software engineering and AI solutions consultant.", schema: text(5000) },
+  { key: "CHATBOT_SYSTEM_PROMPT", section: "chatbot", label: "Custom System Prompt", description: "Blank = built automatically from your brand settings and links", type: "textarea", default: "", schema: text(5000) },
   { key: "CHATBOT_MAX_WORDS", section: "chatbot", label: "Max Response Length (Words)", type: "number", default: "150", schema: intIn(10, 2000) },
   { key: "CHATBOT_CONTACT_LINK", section: "chatbot", label: "Contact Link", description: "Blank = built-in default", type: "url", default: "", schema: url },
   { key: "CHATBOT_PORTFOLIO_LINK", section: "chatbot", label: "Portfolio Link", description: "Blank = built-in default", type: "url", default: "", schema: url },

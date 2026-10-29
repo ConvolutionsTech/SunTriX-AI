@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { groqAdapter } from "../integrations/groq/groq.adapter";
-import { boundChatContext } from "../services/groq";
+import { sendChat } from "../services/groq";
+import { getSetting } from "../lib/configLoader";
 
 const router = Router();
 
@@ -10,6 +10,12 @@ const MAX_MESSAGES = 50;
 // POST /chat — public AI chat assistant
 router.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Admin switches: Settings → Chatbot / AI
+    if (getSetting("CHATBOT_ENABLED", "true") !== "true" || getSetting("AI_ENABLED", "true") === "false") {
+      res.status(503).json({ error: "The chat assistant is turned off.", code: "CHAT_DISABLED" });
+      return;
+    }
+
     const { messages } = req.body as { messages: Array<{ role: "user" | "assistant"; content: string }> };
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -28,19 +34,9 @@ router.post("/", async (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
-    const bounded = boundChatContext(recentMessages);
-    const systemPrompt = "You are SunTriX AI Assistant, an elite software engineering and AI solutions consultant.";
-    
-    let content = "";
-    try {
-      content = await groqAdapter.generateChatCompletion({
-        systemPrompt,
-        messages: bounded.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-      });
-    } catch (err: any) {
-      console.error("Groq AI Error in chat route:", err.message || err);
-      content = "The AI assistant is currently unavailable. Please try again shortly or contact support.";
-    }
+    // sendChat bounds the context, builds the brand-aware system prompt and
+    // turns Groq failures (incl. timeouts) into a friendly fallback message
+    const content = await sendChat(recentMessages);
 
     res.json({
       choices: [{ message: { role: "assistant", content } }],
