@@ -3,7 +3,7 @@ import { loadSettingsFromDB, getSetting } from "./lib/configLoader";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import morgan from "morgan";
+import { logger, httpLogger } from "./lib/logger";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
@@ -44,6 +44,9 @@ const PORT = process.env.PORT || 4000;
 // ─── Trust Proxy ──────────────────────────────────────────────────
 // See lib/trustProxy.ts — unset TRUST_PROXY trusts no proxy, so clients can't spoof req.ip
 app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
+
+// ─── Request logging (first, so every response — even a CORS or rate-limit rejection — has a request id) ──
+app.use(httpLogger());
 
 // ─── Security ────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
@@ -163,11 +166,6 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Strips keys containing $ or . from req.body, req.params, req.query
 app.use(mongoSanitize({ replaceWith: "_" }));
 
-// ─── Logging ─────────────────────────────────────────────────────
-if (process.env.NODE_ENV !== "test") {
-  app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-}
-
 // ─── Health Check ─────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
@@ -221,15 +219,13 @@ async function start() {
   await loadSettingsFromDB();
   startScheduler();
   app.listen(PORT, () => {
-    console.log(`\n🚀 SunTriX API running on http://localhost:${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/health`);
-    console.log(`   Env:    ${process.env.NODE_ENV}\n`);
+    logger.info({ port: PORT, env: process.env.NODE_ENV }, `SunTriX API listening on :${PORT}`);
   });
 }
 
 if (process.env.NODE_ENV !== "test") {
   start().catch((err) => {
-    console.error("Fatal startup error:", err);
+    logger.fatal({ err }, "Fatal startup error");
     process.exit(1);
   });
 }

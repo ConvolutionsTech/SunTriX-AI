@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { logger } from "../lib/logger";
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 5000;
@@ -6,7 +7,7 @@ const RETRY_DELAY_MS = 5000;
 // ─── Startup summary ─────────────────────────────────────────────────────────
 function logDatabaseInfo(): void {
   const conn = mongoose.connection;
-  console.log(`✅ MongoDB connected: ${conn.host}/${conn.name} — ${mongoose.modelNames().length} models registered`);
+  logger.info(`✅ MongoDB connected: ${conn.host}/${conn.name} — ${mongoose.modelNames().length} models registered`);
 }
 
 // ─── Connect ──────────────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ export async function connectDB(): Promise<void> {
 
   // Database name is the path segment after the host (with or without a query string)
   const dbNameFromUri = uri.match(/^mongodb(?:\+srv)?:\/\/[^/]+\/([^/?]+)/)?.[1] || "(not set — defaults to 'test')";
-  console.log(`🔌 Connecting to MongoDB (database: ${dbNameFromUri})…`);
+  logger.info(`🔌 Connecting to MongoDB (database: ${dbNameFromUri})…`);
 
   let attempt = 0;
   while (attempt < MAX_RETRIES) {
@@ -29,9 +30,9 @@ export async function connectDB(): Promise<void> {
       return;
     } catch (err) {
       attempt++;
-      console.error(`❌ MongoDB connection attempt ${attempt} failed:`, err);
+      logger.error({ err, attempt }, "MongoDB connection attempt failed");
       if (attempt < MAX_RETRIES) {
-        console.log(`⏳ Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+        logger.info(`⏳ Retrying in ${RETRY_DELAY_MS / 1000}s...`);
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       }
     }
@@ -41,9 +42,9 @@ export async function connectDB(): Promise<void> {
 
 // ─── Event listeners ─────────────────────────────────────────────────────────
 mongoose.connection.on("disconnected", () => {
-  console.warn("⚠️  MongoDB disconnected");
+  logger.warn("⚠️  MongoDB disconnected");
 });
 
 mongoose.connection.on("error", (err) => {
-  console.error("MongoDB error:", err);
+  logger.error({ err }, "MongoDB error");
 });

@@ -11,6 +11,7 @@ import { sendPaymentConfirmation, sendInvoiceEmail, sendAdminAlert } from "../..
 import Payment from "../../models/Payment";
 import ProjectTracker from "../../models/ProjectTracker";
 import WebhookEvent from "../../models/WebhookEvent";
+import { logger } from "../../lib/logger";
 
 const INVOICEABLE = ["contract_signed", "in_progress"];
 const CHECKOUT_LOCK_MS = 60_000;
@@ -316,7 +317,7 @@ export class PaymentService {
         await this.runPaidSideEffects(payment);
         done++;
       } catch (err) {
-        console.error(`[Payments] Side effects still failing for payment ${payment._id}:`, (err as Error).message);
+        logger.error({ err, paymentId: String(payment._id) }, "Post-payment side effects still failing");
       }
     }
     return done;

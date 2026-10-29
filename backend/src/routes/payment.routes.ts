@@ -7,6 +7,7 @@ import { AppError } from "../shared/errors/appError";
 import Payment from "../models/Payment";
 import TaskRequest from "../models/TaskRequest";
 import { toClientInvoice } from "../lib/clientDto";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -99,7 +100,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
     const result = await paymentService.handleStripeWebhookEvent(rawBody, sig);
     res.json(result);
   } catch (err: any) {
-    console.error("Stripe Webhook Error:", err.message);
+    logger.error({ err }, "Stripe Webhook Error");
     // Bad signature/payload → 400 (not retried). Anything else — misconfiguration,
     // database or post-payment failures — → 500 so Stripe retries the event.
     if (err instanceof AppError && err.statusCode === 400) {

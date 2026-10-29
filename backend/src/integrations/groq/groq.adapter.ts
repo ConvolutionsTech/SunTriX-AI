@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { getSetting } from "../../lib/configLoader";
+import { logger } from "../../lib/logger";
 
 export interface DiscoveredModel {
   id: string;
@@ -93,7 +94,7 @@ export class GroqAdapter {
       modelCache = { models, timestamp: now };
       return models;
     } catch (err: any) {
-      console.warn(`[GroqAdapter] Failed to fetch dynamic models from Groq API: ${err.message || err}`);
+      logger.warn(`[GroqAdapter] Failed to fetch dynamic models from Groq API: ${err.message || err}`);
       if (modelCache) return modelCache.models;
       return [];
     }
@@ -148,7 +149,7 @@ export class GroqAdapter {
     const temperature = params.temperature ?? parseFloat(getSetting("GROQ_CHAT_TEMPERATURE", "0.7"));
     const maxTokens = params.maxTokens ?? parseInt(getSetting("GROQ_CHAT_MAX_TOKENS", "1024"));
 
-    console.log(`[GroqAdapter] Executing AI Request | Operation: ${params.operation || "chat"} | Model: ${model} | Temp: ${temperature}`);
+    logger.debug(`[GroqAdapter] Executing AI Request | Operation: ${params.operation || "chat"} | Model: ${model} | Temp: ${temperature}`);
 
     // Direct SDK call — exact configured model is sent without silent replacement
     const response = await client.chat.completions.create({

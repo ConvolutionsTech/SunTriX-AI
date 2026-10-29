@@ -10,6 +10,7 @@ import ProjectTracker from "../../models/ProjectTracker";
 import Payment from "../../models/Payment";
 import TaskRequest from "../../models/TaskRequest";
 import { sendTaskNotification } from "../../services/email";
+import { logger } from "../../lib/logger";
 
 export class TaskRequestService {
   constructor(private repo: TaskRequestRepository = taskRequestRepository) {}
@@ -33,7 +34,7 @@ export class TaskRequestService {
       projectTitle: task.projectTitle,
       description: task.description,
       selectedPlan: task.selectedPlan,
-    }).catch(console.error);
+    }).catch((err) => logger.error({ err }, "Task notification email failed"));
 
     return { task, trackingToken };
   }

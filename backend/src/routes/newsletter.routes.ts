@@ -7,6 +7,7 @@ import { createError } from "../middleware/errorHandler";
 import { getSetting } from "../lib/configLoader";
 import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail, BroadcastRecipient } from "../services/email";
 import { validate, NewsletterSubscribeSchema, NewsletterBroadcastSchema } from "../middleware/validate";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -192,7 +193,7 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
         const { sentCount, error } = await sendNewsletterBroadcast(subject, finalBody, recipients);
 
         if (error) {
-          console.error(`[Newsletter] Broadcast failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
+          logger.error(`[Newsletter] Broadcast failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
           await Campaign.findByIdAndUpdate(campaign._id, {
             status: "failed",
             sentCount,
@@ -211,11 +212,11 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
             sentCount,
             sentAt: new Date(),
           });
-          console.log(`[Newsletter] Broadcast complete: campaign=${campaign._id}, recipients=${emails.length}`);
+          logger.info(`[Newsletter] Broadcast complete: campaign=${campaign._id}, recipients=${emails.length}`);
         }
       } catch (err: any) {
         const errMsg = err?.message || String(err);
-        console.error(`[Newsletter] Broadcast crashed unexpectedly: campaign=${campaign._id}`, errMsg);
+        logger.error({ campaignId: String(campaign._id), err: errMsg }, "[Newsletter] Broadcast crashed unexpectedly");
         await Campaign.findByIdAndUpdate(campaign._id, {
           status: "failed",
           errorMessage: errMsg.substring(0, 500),
@@ -271,7 +272,7 @@ router.post("/admin/campaigns/:id/retry", requireAuth, requireRole("admin"), asy
         const newTotalSentCount = campaign.sentCount + sentCount;
         
         if (error) {
-          console.error(`[Newsletter] Retry failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
+          logger.error(`[Newsletter] Retry failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
           await Campaign.findByIdAndUpdate(campaign._id, {
             status: "failed",
             sentCount: newTotalSentCount,
@@ -290,11 +291,11 @@ router.post("/admin/campaigns/:id/retry", requireAuth, requireRole("admin"), asy
             sentCount: newTotalSentCount,
             sentAt: new Date(),
           });
-          console.log(`[Newsletter] Retry complete: campaign=${campaign._id}, remaining recipients=${remainingEmails.length}`);
+          logger.info(`[Newsletter] Retry complete: campaign=${campaign._id}, remaining recipients=${remainingEmails.length}`);
         }
       } catch (err: any) {
         const errMsg = err?.message || String(err);
-        console.error(`[Newsletter] Retry crashed unexpectedly: campaign=${campaign._id}`, errMsg);
+        logger.error({ campaignId: String(campaign._id), err: errMsg }, "[Newsletter] Retry crashed unexpectedly");
         await Campaign.findByIdAndUpdate(campaign._id, {
           status: "failed",
           errorMessage: errMsg.substring(0, 500),

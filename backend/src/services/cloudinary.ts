@@ -5,6 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import { getSetting } from "../lib/configLoader";
 import MediaAsset from "../models/MediaAsset";
+import { logger } from "../lib/logger";
 
 // ─── Apply current config before every operation ──────────────────────────
 export function applyConfig(): void {
@@ -89,7 +90,7 @@ export async function uploadImage(
           folder: targetFolder
         });
       } catch (dbErr) {
-        console.error("Failed to save MediaAsset to DB:", dbErr);
+        logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");
       }
 
       resolve({ 
@@ -145,7 +146,7 @@ export async function uploadVideo(
             folder: targetFolder
           });
         } catch (dbErr) {
-          console.error("Failed to save MediaAsset to DB:", dbErr);
+          logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");
         }
 
         resolve({ 
@@ -207,7 +208,7 @@ export async function uploadDocument(
             originalName
           });
         } catch (dbErr) {
-          console.error("Failed to save MediaAsset to DB:", dbErr);
+          logger.error({ err: dbErr }, "Failed to save MediaAsset to DB");
         }
 
         resolve({ 
@@ -234,7 +235,7 @@ export async function deleteAsset(
   if (result.result === "ok" || result.result === "not_found") {
     await MediaAsset.deleteOne({ publicId });
   } else {
-    console.warn(`Cloudinary destroy returned result: ${result.result} for ${publicId}`);
+    logger.warn(`Cloudinary destroy returned result: ${result.result} for ${publicId}`);
     await MediaAsset.deleteOne({ publicId });
   }
 }

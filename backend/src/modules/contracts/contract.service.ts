@@ -5,6 +5,7 @@ import { AppError, ERROR_CODES } from "../../shared/errors/appError";
 import { IContract, SignContractDTO } from "./contract.types";
 import { getSetting } from "../../lib/configLoader";
 import { sendContractSignedNotification } from "../../services/email";
+import { logger } from "../../lib/logger";
 
 export class ContractService {
   constructor(
@@ -72,7 +73,7 @@ export class ContractService {
       clientEmail: contract.clientEmail,
       signedAt: (contract.signedAt || new Date()).toISOString(),
       adminUrl: `${appUrl}/admin/tasks`,
-    }).catch(console.error);
+    }).catch((err) => logger.error({ err }, "Contract-signed notification failed"));
 
     return { contract, trackerToken: tracker.trackerToken };
   }

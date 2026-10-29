@@ -1,6 +1,7 @@
 import { resendAdapter } from "../integrations/resend/resend.adapter";
 import { getSetting } from "../lib/configLoader";
 import { escapeFields } from "../lib/escapeHtml";
+import { logger } from "../lib/logger";
 
 // ─── Lazy factory — delegates to ResendAdapter ────────────────────────────
 function getResend() {
@@ -57,9 +58,9 @@ export async function sendContactNotification(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Notification Error (Contact):", error.message);
+    if (error) logger.error({ err: error }, "Resend Notification Error (Contact)");
   } catch (err: any) {
-    console.error("Failed to send contact notification email:", err.message || err);
+    logger.error({ err }, "Failed to send contact notification email");
   }
 }
 
@@ -104,9 +105,9 @@ export async function sendTaskNotification(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Notification Error (Task):", error.message);
+    if (error) logger.error({ err: error }, "Resend Notification Error (Task)");
   } catch (err: any) {
-    console.error("Failed to send task notification email:", err.message || err);
+    logger.error({ err }, "Failed to send task notification email");
   }
 }
 
@@ -126,7 +127,7 @@ export async function sendTrackerPhaseAdvancedEmail(data: { clientEmail: string;
         <a href="${e.portalUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View Project Hub</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerDeliverableReviewEmail(data: { clientEmail: string; projectTitle: string; deliverableTitle: string; portalUrl: string; }): Promise<void> {
@@ -143,7 +144,7 @@ export async function sendTrackerDeliverableReviewEmail(data: { clientEmail: str
         <a href="${e.portalUrl}" style="display:inline-block;background:#f59e0b;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Review Deliverable</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerUpdateEmail(data: { clientEmail: string; projectTitle: string; updateType: string; portalUrl: string; isActionRequired: boolean; }): Promise<void> {
@@ -160,7 +161,7 @@ export async function sendTrackerUpdateEmail(data: { clientEmail: string; projec
         <a href="${e.portalUrl}" style="display:inline-block;background:${color};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Read Update</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerFileEmail(data: { clientEmail: string; projectTitle: string; filename: string; portalUrl: string; }): Promise<void> {
@@ -176,7 +177,7 @@ export async function sendTrackerFileEmail(data: { clientEmail: string; projectT
         <a href="${e.portalUrl}" style="display:inline-block;background:#3b82f6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View File</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
@@ -193,7 +194,7 @@ export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; pr
         <a href="${e.portalUrl}" style="display:inline-block;background:#ef4444;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Pay Invoice Now</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
@@ -210,7 +211,7 @@ export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: stri
         <a href="${e.portalUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Go to Project Hub</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 
 export async function sendTrackerClientActionToAdminEmail(data: { actionStr: string; projectTitle: string; targetName: string; adminUrl: string; }): Promise<void> {
@@ -226,7 +227,7 @@ export async function sendTrackerClientActionToAdminEmail(data: { actionStr: str
         <a href="${e.adminUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Open Admin Dashboard</a>
       </div>`,
     });
-  } catch (err) { console.error("Email Error:", err); }
+  } catch (err) { logger.error({ err }, "Email Error"); }
 }
 // ─── Invoice / proposal email ──────────────────────────────────────────────
 export async function sendInvoiceEmail(data: {
@@ -284,9 +285,9 @@ export async function sendInvoiceEmail(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Invoice Email Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Invoice Email Error");
   } catch (err: any) {
-    console.error("Failed to send invoice email:", err.message || err);
+    logger.error({ err }, "Failed to send invoice email");
   }
 }
 
@@ -355,9 +356,9 @@ export async function sendPaymentConfirmation(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Payment Confirmation Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Payment Confirmation Error");
   } catch (err: any) {
-    console.error("Failed to send payment confirmation email:", err.message || err);
+    logger.error({ err }, "Failed to send payment confirmation email");
   }
 }
 
@@ -400,14 +401,14 @@ export async function sendNewsletterBroadcast(
       const { error } = await getResend().batch.send(batch);
       if (error) {
         // Includes Resend test mode ("testing email address" restriction): nothing was delivered
-        console.error("Resend Batch Error:", error);
+        logger.error({ err: error }, "Resend Batch Error");
         return { sentCount, error: error.message };
       }
       sentCount += batch.length;
     }
     return { sentCount };
   } catch (err: any) {
-    console.error("Broadcast failed:", err);
+    logger.error({ err }, "Broadcast failed");
     return { sentCount, error: err.message || "Failed to broadcast" };
   }
 }
@@ -435,9 +436,9 @@ export async function sendCampaignFailureNotification(data: {
           <p>You can retry the remaining unsent emails from the Admin Dashboard.</p>
         </div>`,
     });
-    if (error) console.error("Resend Failure Email Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Failure Email Error");
   } catch (err: any) {
-    console.error("Failed to send campaign failure email:", err.message || err);
+    logger.error({ err }, "Failed to send campaign failure email");
   }
 }
 
@@ -455,11 +456,11 @@ export async function sendDirectReply(
       html: htmlBody,
     });
     if (error) {
-      console.error("Resend Direct Reply Error:", error);
+      logger.error({ err: error }, "Resend Direct Reply Error");
       throw new Error(error.message);
     }
   } catch (err: any) {
-    console.error("Failed to send direct reply:", err);
+    logger.error({ err }, "Failed to send direct reply");
     throw new Error(err.message || "Failed to send reply");
   }
 }
@@ -530,9 +531,9 @@ export async function sendProposalEmail(data: {
           </div>
         </div>`,
     });
-    if (error) console.error("Resend Proposal Email Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Proposal Email Error");
   } catch (err: any) {
-    console.error("Failed to send proposal email:", err.message || err);
+    logger.error({ err }, "Failed to send proposal email");
   }
 }
 
@@ -565,9 +566,9 @@ export async function sendChangesRequestedNotification(data: {
           <p style="margin-top:16px;color:#6b7280;font-size:12px;">Review in <a href="${e.adminUrl}">Admin Dashboard</a> and revise the proposal.</p>
         </div>`,
     });
-    if (error) console.error("Resend Changes Notification Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Changes Notification Error");
   } catch (err: any) {
-    console.error("Failed to send changes notification:", err.message || err);
+    logger.error({ err }, "Failed to send changes notification");
   }
 }
 
@@ -637,9 +638,9 @@ export async function sendContractEmail(data: {
           </div>
         </div>`,
     });
-    if (error) console.error("Resend Contract Email Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Contract Email Error");
   } catch (err: any) {
-    console.error("Failed to send contract email:", err.message || err);
+    logger.error({ err }, "Failed to send contract email");
   }
 }
 
@@ -672,9 +673,9 @@ export async function sendContractSignedNotification(data: {
           <p style="margin-top:16px;color:#6b7280;font-size:12px;"><a href="${e.adminUrl}">Go to Admin Dashboard →</a></p>
         </div>`,
     });
-    if (error) console.error("Resend Contract Signed Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Contract Signed Error");
   } catch (err: any) {
-    console.error("Failed to send contract signed notification:", err.message || err);
+    logger.error({ err }, "Failed to send contract signed notification");
   }
 }
 // ─── Tracker: Completion sign-off request to client ──────────────────────────
@@ -718,9 +719,9 @@ export async function sendTrackerCompletionRequestEmail(data: {
           </div>
         </div>`,
     });
-    if (error) console.error("Resend Completion Request Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Completion Request Error");
   } catch (err: any) {
-    console.error("Failed to send completion request email:", err.message || err);
+    logger.error({ err }, "Failed to send completion request email");
   }
 }
 
@@ -759,9 +760,9 @@ export async function sendTrackerCompletionApprovedEmail(data: {
           </div>
         </div>`,
     });
-    if (error) console.error("Resend Completion Approved Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Completion Approved Error");
   } catch (err: any) {
-    console.error("Failed to send completion approved email:", err.message || err);
+    logger.error({ err }, "Failed to send completion approved email");
   }
 }
 
@@ -817,7 +818,7 @@ export async function sendSignedContractEmail(data: {
       attachments: [{ filename: data.filename, content: attachmentContent }],
     });
   } catch (err: any) {
-    console.error("Failed to send signed contract email:", err.message || err);
+    logger.error({ err }, "Failed to send signed contract email");
   }
 }
 
@@ -871,9 +872,9 @@ export async function sendNewsletterConfirmationEmail(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Error (newsletter confirmation):", error.message);
+    if (error) logger.error({ err: error }, "Resend Error (newsletter confirmation)");
   } catch (err: any) {
-    console.error("Failed to send newsletter confirmation email:", err.message || err);
+    logger.error({ err }, "Failed to send newsletter confirmation email");
   }
 }
 
@@ -924,9 +925,9 @@ export async function sendNewsletterWelcomeEmail(data: {
         </div>
       `,
     });
-    if (error) console.error("Resend Error (newsletter welcome):", error.message);
+    if (error) logger.error({ err: error }, "Resend Error (newsletter welcome)");
   } catch (err: any) {
-    console.error("Failed to send newsletter welcome email:", err.message || err);
+    logger.error({ err }, "Failed to send newsletter welcome email");
   }
 }
 
@@ -947,9 +948,9 @@ export async function sendPasswordResetEmail(data: { email: string; name: string
         </div>
       `,
     });
-    if (error) console.error("Resend Password Reset Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Password Reset Error");
   } catch (err: any) {
-    console.error("Failed to send password reset email:", err.message || err);
+    logger.error({ err }, "Failed to send password reset email");
   }
 }
 
@@ -969,8 +970,8 @@ export async function sendAdminAlert(data: { subject: string; message: string; a
         </div>
       `,
     });
-    if (error) console.error("Resend Admin Alert Error:", error.message);
+    if (error) logger.error({ err: error }, "Resend Admin Alert Error");
   } catch (err: any) {
-    console.error("Failed to send admin alert:", err.message || err);
+    logger.error({ err }, "Failed to send admin alert");
   }
 }

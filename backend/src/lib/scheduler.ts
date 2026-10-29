@@ -5,6 +5,7 @@ import AuditLog from "../models/AuditLog";
 import Proposal from "../models/Proposal";
 import Contract from "../models/Contract";
 import { getSetting } from "./configLoader";
+import { logger } from "./logger";
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
 
@@ -21,7 +22,7 @@ export async function expireLifecycleDocuments(now = new Date()): Promise<void> 
   );
   const total = proposals.modifiedCount + contracts.modifiedCount + stuck.modifiedCount;
   if (total > 0) {
-    console.log(`[Scheduler] Expired ${proposals.modifiedCount} proposal(s), ${contracts.modifiedCount} contract(s); released ${stuck.modifiedCount} stuck acceptance(s)`);
+    logger.info(`[Scheduler] Expired ${proposals.modifiedCount} proposal(s), ${contracts.modifiedCount} contract(s); released ${stuck.modifiedCount} stuck acceptance(s)`);
   }
 }
 
@@ -31,15 +32,15 @@ export function startScheduler(): void {
     try {
       const { paymentService } = await import("../modules/payments/payment.service");
       const done = await paymentService.reconcilePaidPayments();
-      if (done > 0) console.log(`[Scheduler] Completed post-payment work for ${done} payment(s)`);
+      if (done > 0) logger.info(`[Scheduler] Completed post-payment work for ${done} payment(s)`);
     } catch (err) {
-      console.error("[Scheduler] Error during payment reconciliation:", err);
+      logger.error({ err }, "[Scheduler] Error during payment reconciliation");
     }
   });
 
   // ── Every 5 minutes: expire proposals/contracts, release stuck acceptances ─
   cron.schedule("*/5 * * * *", () => {
-    expireLifecycleDocuments().catch((err) => console.error("[Scheduler] Error during lifecycle expiry:", err));
+    expireLifecycleDocuments().catch((err) => logger.error({ err }, "[Scheduler] Error during lifecycle expiry"));
   });
 
   // ── Every 5 minutes: auto-publish scheduled content ────────────
@@ -52,7 +53,7 @@ export function startScheduler(): void {
         { status: "published", publishedAt: now }
       );
       if (postsResult.modifiedCount > 0) {
-        console.log(`[Scheduler] Auto-published ${postsResult.modifiedCount} blog post(s)`);
+        logger.info(`[Scheduler] Auto-published ${postsResult.modifiedCount} blog post(s)`);
       }
 
       // Auto-publish scheduled portfolio items
@@ -61,10 +62,10 @@ export function startScheduler(): void {
         { status: "published" }
       );
       if (portfolioResult.modifiedCount > 0) {
-        console.log(`[Scheduler] Auto-published ${portfolioResult.modifiedCount} portfolio item(s)`);
+        logger.info(`[Scheduler] Auto-published ${portfolioResult.modifiedCount} portfolio item(s)`);
       }
     } catch (err) {
-      console.error("[Scheduler] Error during auto-publish:", err);
+      logger.error({ err }, "[Scheduler] Error during auto-publish");
     }
   });
 
@@ -77,13 +78,13 @@ export function startScheduler(): void {
       cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
       const result = await AuditLog.deleteMany({ createdAt: { $lt: cutoffDate } });
       if (result.deletedCount > 0) {
-        console.log(`[Scheduler] Pruned ${result.deletedCount} audit log entries older than ${retentionDays} days`);
+        logger.info(`[Scheduler] Pruned ${result.deletedCount} audit log entries older than ${retentionDays} days`);
       }
     } catch (err) {
-      console.error("[Scheduler] Error during audit log cleanup:", err);
+      logger.error({ err }, "[Scheduler] Error during audit log cleanup");
     }
   });
 
-  console.log("[Scheduler] Jobs started: auto-publish (*/5 min), audit cleanup (daily 2am)");
+  logger.info("[Scheduler] Jobs started: auto-publish (*/5 min), audit cleanup (daily 2am)");
 }
 

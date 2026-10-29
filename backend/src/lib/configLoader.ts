@@ -13,6 +13,7 @@
 
 import SystemSetting from "../models/SystemSetting";
 import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry";
+import { logger } from "./logger";
 
 // ─── Env-only settings ─────────────────────────────────────────────────────
 // Secrets and deployment parameters come from the environment only. DB rows for these
@@ -66,7 +67,7 @@ export async function loadSettingsFromDB(): Promise<void> {
       { ordered: false }
     );
   } catch (err) {
-    console.warn("⚠️  Could not seed default settings:", (err as Error).message);
+    logger.warn({ err }, "⚠️  Could not seed default settings");
   }
 
   // 2. Load runtime settings. A failure here must not prevent the seeding above,
@@ -76,21 +77,21 @@ export async function loadSettingsFromDB(): Promise<void> {
     let loaded = 0;
     for (const s of settings) {
       if (isEnvOnlySetting(s.key)) {
-        console.warn(
+        logger.warn(
           `⚠️  Ignoring DB value for env-only setting ${s.key}` +
             (process.env[s.key] ? "" : " — it is NOT set in the environment either")
         );
         continue;
       }
       if (!SETTINGS_BY_KEY.has(s.key)) {
-        console.warn(`⚠️  Ignoring unknown setting in DB: ${s.key}`);
+        logger.warn(`⚠️  Ignoring unknown setting in DB: ${s.key}`);
         continue;
       }
       cache[s.key] = s.value ?? "";
       loaded++;
     }
-    console.log(`✅ Loaded ${loaded} runtime settings from DB`);
+    logger.info(`✅ Loaded ${loaded} runtime settings from DB`);
   } catch (err) {
-    console.warn("⚠️  Could not load settings from DB — using environment and defaults", (err as Error).message);
+    logger.warn({ err }, "⚠️  Could not load settings from DB — using environment and defaults");
   }
 }

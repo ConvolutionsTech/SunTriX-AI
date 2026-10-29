@@ -5,6 +5,7 @@ import { updateSettingCache, getSetting, isEnvOnlySetting } from "../lib/configL
 import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry";
 import AuditLog from "../models/AuditLog";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -128,7 +129,7 @@ async function saveSetting(key: string, rawValue: unknown, user: AuthRequest["us
     adminId: user?.id || "system",
     adminName: user?.name || "System",
     diff: { oldValue: before?.value ?? def.default, newValue: value },
-  }).catch((err) => console.error("Audit log write failed for setting", key, err.message));
+  }).catch((err) => logger.error({ err, key }, "Audit log write failed for setting"));
 
   return { warning };
 }

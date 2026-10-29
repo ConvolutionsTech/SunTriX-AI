@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../shared/errors/appError";
+import { logger, redactUrl } from "../lib/logger";
 
 /**
  * Single error contract for every API response:
@@ -39,7 +40,7 @@ export function errorHandler(err: any, req: Request, res: Response, _next: NextF
   const requestId = (req as Request & { id?: string }).id;
 
   if (status >= 500) {
-    console.error(`[${requestId ?? "-"}] ${req.method} ${req.originalUrl} → ${status}:`, err);
+    logger.error({ err, reqId: requestId, method: req.method, url: redactUrl(req.originalUrl), status }, "Request failed");
   }
 
   const hideDetails = status >= 500 && process.env.NODE_ENV === "production";

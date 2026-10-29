@@ -6,6 +6,7 @@ import { validate, ContactSchema, ContactReplySchema } from "../middleware/valid
 import { escapeHtml } from "../lib/escapeHtml";
 import { logAudit } from "../lib/audit";
 import { sendContactNotification } from "../services/email";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.post("/", validate(ContactSchema), async (req: Request, res: Response, ne
       company: msg.company,
       subject: msg.subject,
       message: msg.message,
-    }).catch(console.error);
+    }).catch((err) => logger.error({ err }, "Contact notification email failed"));
 
     res.status(201).json({ message: "Message sent successfully" });
   } catch (err) {

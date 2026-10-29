@@ -9,6 +9,7 @@ import { getSetting } from "../../lib/configLoader";
 import TaskRequest from "../../models/TaskRequest";
 import { draftProposalWithAI, generateContractWithAI } from "../../services/groq";
 import { sendProposalEmail, sendChangesRequestedNotification, sendContractEmail } from "../../services/email";
+import { logger } from "../../lib/logger";
 
 const SENDABLE: ProposalStatus[] = ["draft", "changes_requested", "expired"];
 const PROPOSAL_TTL_DAYS = 14;
@@ -207,7 +208,7 @@ export class ProposalService {
 
     await this.taskService
       .transitionStatus(updated.taskRequestId.toString(), "in_review", "client", "Client requested changes to the proposal")
-      .catch((err) => console.error("Could not move request back to review:", err.message));
+      .catch((err) => logger.error({ err }, "Could not move request back to review"));
 
     const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
     await sendChangesRequestedNotification({

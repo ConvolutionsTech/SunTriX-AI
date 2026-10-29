@@ -1,5 +1,6 @@
 import { Request } from "express";
 import AuditLog, { AuditAction } from "../models/AuditLog";
+import { logger } from "./logger";
 
 interface AdminUser {
   id: string;
@@ -28,6 +29,6 @@ export async function logAudit(
     });
   } catch (err) {
     // Audit logging is non-fatal
-    console.error("Audit log error:", err);
+    logger.error({ err }, "Audit log error");
   }
 }

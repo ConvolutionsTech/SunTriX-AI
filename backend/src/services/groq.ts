@@ -1,6 +1,7 @@
 import { getSetting } from "../lib/configLoader";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
 import { toCents } from "../lib/money";
+import { logger } from "../lib/logger";
 
 // Shared client from the adapter (cached per key, bounded timeout)
 const getGroqClient = () => groqAdapter.getClient();
@@ -80,7 +81,7 @@ export async function sendChat(messages: ChatMessage[]): Promise<string> {
       messages: boundedMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     });
   } catch (err: any) {
-    console.error("Groq AI Error in sendChat:", err.message || err);
+    logger.error({ err }, "Groq AI Error in sendChat");
     if (err.status === 429) {
       return "The AI assistant is experiencing high demand. Please wait a moment and try again.";
     }

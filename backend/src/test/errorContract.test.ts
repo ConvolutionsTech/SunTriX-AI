@@ -4,6 +4,7 @@ import app from "../app";
 import { errorHandler } from "../middleware/errorHandler";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/db";
 import { staffToken } from "./helpers/auth";
+import { logger } from "../lib/logger";
 
 describe("error contract (A21, M13)", () => {
   beforeAll(async () => {
@@ -49,7 +50,7 @@ describe("error contract (A21, M13)", () => {
 
   it("unexpected errors in production hide internals but are logged", () => {
     vi.stubEnv("NODE_ENV", "production");
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(logger, "error").mockImplementation(() => {});
     const json = vi.fn();
     const res = { status: vi.fn(() => ({ json })) } as any;
     errorHandler(new Error("connect ECONNREFUSED 10.0.0.5:27017"), { method: "GET", originalUrl: "/v1/x", id: "req-1" } as any, res, vi.fn());

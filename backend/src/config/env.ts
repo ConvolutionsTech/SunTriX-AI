@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logger } from "../lib/logger";
 
 /**
  * Startup environment validation. Secrets are env-only (see isEnvOnlySetting),
@@ -60,12 +61,12 @@ export function validateEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   if (result.data.NODE_ENV === "production" && !result.data.TRUST_PROXY) {
-    console.warn("⚠️  TRUST_PROXY is not set: behind a load balancer every client shares one rate-limit bucket. Set it to the number of proxies in front of the app.");
+    logger.warn("⚠️  TRUST_PROXY is not set: behind a load balancer every client shares one rate-limit bucket. Set it to the number of proxies in front of the app.");
   }
 
   if (result.data.NODE_ENV !== "production") {
     const missing = PRODUCTION_REQUIRED.filter((k) => !result.data[k]);
-    if (missing.length) console.warn(`⚠️  Not configured (required in production): ${missing.join(", ")}`);
+    if (missing.length) logger.warn(`⚠️  Not configured (required in production): ${missing.join(", ")}`);
   }
   return result.data;
 }

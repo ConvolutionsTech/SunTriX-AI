@@ -5,6 +5,7 @@ import ProjectTracker from "../../models/ProjectTracker";
 import TrackerMessage from "../../models/TrackerMessage";
 import { sendTrackerClientActionToAdminEmail } from "../../services/email";
 import { getSetting } from "../../lib/configLoader";
+import { logger } from "../../lib/logger";
 
 export class ProjectService {
   constructor(private projectRepo: ProjectRepository = projectRepository) {}
@@ -45,7 +46,7 @@ export class ProjectService {
         projectTitle: (tracker as any).projectTitle,
         targetName: (tracker as any).clientName,
         adminUrl: `${appUrl}/admin/tasks`,
-      }).catch(console.error);
+      }).catch((err) => logger.error({ err }, "Tracker client-action email failed"));
     }
 
     return msg;
