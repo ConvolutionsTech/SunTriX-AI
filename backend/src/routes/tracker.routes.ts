@@ -1,3 +1,4 @@
+import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { Router, Request, Response, NextFunction } from "express";
 import ProjectTracker from "../models/ProjectTracker";
 import TrackerMessage from "../models/TrackerMessage";
@@ -331,27 +332,35 @@ router.post("/admin/:id/completion/request", requireAuth, async (req: Request, r
 // ─── CLIENT: Approve project completion ────────────────────────────
 router.post("/client/:token/completion/approve", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
-    if (!tracker.completionRequestedAt) return next(createError("No sign-off requested yet", 400));
-    if (tracker.completionApprovedAt) return next(createError("Already approved", 400));
+    // Claim the approval atomically: concurrent clicks get exactly one success
+    const tracker = await ProjectTracker.findOneAndUpdate(
+      { trackerToken: req.params.token, completionRequestedAt: { $ne: null }, completionApprovedAt: null },
+      { $set: { completionApprovedAt: new Date() } },
+      { new: true }
+    );
+    if (!tracker) {
+      const existing = await ProjectTracker.findOne({ trackerToken: req.params.token }).select("completionRequestedAt completionApprovedAt").lean();
+      if (!existing) return next(createError("Invalid token", 404));
+      if (!existing.completionRequestedAt) return next(createError("No sign-off requested yet", 400));
+      return next(createError("Already approved", 409));
+    }
 
-    tracker.completionApprovedAt = new Date();
+    try {
+      await taskRequestService.transitionStatus(
+        String(tracker.taskRequestId),
+        "completed",
+        "client",
+        `Project completed and approved by client on ${new Date().toLocaleDateString("en-US", { dateStyle: "long" })}`
+      );
+    } catch (err) {
+      // The task isn't in progress any more (e.g. cancelled): release the claim
+      await ProjectTracker.updateOne({ _id: tracker._id }, { $set: { completionApprovedAt: null } });
+      throw err;
+    }
+
     const task = await TaskRequest.findById(tracker.taskRequestId).lean() as any;
     await writeAudit(tracker, `Project completion approved by client: ${task?.name || "Client"}`, task?.name || "Client", "Client");
     await tracker.save();
-
-    // Mark task as completed
-    await TaskRequest.findByIdAndUpdate(tracker.taskRequestId, {
-      status: "completed",
-      $push: {
-        statusHistory: {
-          status: "completed",
-          note: `Project completed and approved by client on ${new Date().toLocaleDateString("en-US", { dateStyle: "long" })}`,
-          updatedAt: new Date(),
-        }
-      }
-    });
 
     // Notify admin
     if (task) {

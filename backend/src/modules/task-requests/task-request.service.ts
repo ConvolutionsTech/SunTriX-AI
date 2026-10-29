@@ -60,22 +60,7 @@ export class TaskRequestService {
     actorRole: ActorRole = "admin",
     note: string = ""
   ): Promise<ITaskRequest> {
-    const task = await this.repo.findById(id);
-    if (!task) throw new AppError("Task request not found", ERROR_CODES.NOT_FOUND);
-
-    const currentStatus = task.status as TaskRequestStatus;
-    if (currentStatus === newStatus) return task;
-
-    if (!TaskStatusMachine.isValidTransition(currentStatus, newStatus, actorRole)) {
-      throw new AppError(
-        `Invalid status transition from '${currentStatus}' to '${newStatus}' by ${actorRole}.`,
-        ERROR_CODES.BAD_REQUEST
-      );
-    }
-
-    const updated = await this.repo.updateStatus(id, newStatus, note);
-    if (!updated) throw new AppError("Failed to update status", ERROR_CODES.INTERNAL_SERVER_ERROR);
-    return updated;
+    return TaskStatusMachine.transition(id, newStatus, actorRole, note);
   }
 
   async getAllTasks(filter: Record<string, unknown> = {}, limit = 100, skip = 0): Promise<{ tasks: ITaskRequest[]; total: number }> {

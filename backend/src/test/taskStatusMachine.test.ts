@@ -31,9 +31,10 @@ describe("2.1 TaskStatusMachine Unit Tests", () => {
     });
 
     it("should reject unauthorized actor transitions", () => {
-      // Client cannot directly set in_progress or completed
+      // Client cannot start work, and can only complete a project that is in progress (final sign-off)
       expect(TaskStatusMachine.isValidTransition("contract_signed", "in_progress", "client")).toBe(false);
-      expect(TaskStatusMachine.isValidTransition("in_progress", "completed", "client")).toBe(false);
+      expect(TaskStatusMachine.isValidTransition("contract_signed", "completed", "client")).toBe(false);
+      expect(TaskStatusMachine.isValidTransition("in_progress", "completed", "client")).toBe(true);
     });
   });
 });

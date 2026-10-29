@@ -1,4 +1,4 @@
-import TaskRequest, { ITaskRequest, TaskRequestStatus } from "../../models/TaskRequest";
+import TaskRequest, { ITaskRequest } from "../../models/TaskRequest";
 import { CreateTaskRequestDTO } from "./task-request.types";
 
 export class TaskRequestRepository {
@@ -19,27 +19,6 @@ export class TaskRequestRepository {
     const tasks = await TaskRequest.find(query).sort({ createdAt: -1 }).limit(limit).skip(skip);
     const total = await TaskRequest.countDocuments(query);
     return { tasks, total };
-  }
-
-  async updateStatus(
-    id: string,
-    newStatus: TaskRequestStatus,
-    note: string
-  ): Promise<ITaskRequest | null> {
-    return TaskRequest.findOneAndUpdate(
-      { _id: id, deletedAt: null },
-      {
-        $set: { status: newStatus },
-        $push: {
-          statusHistory: {
-            status: newStatus,
-            note: note || `Status transitioned to ${newStatus}`,
-            updatedAt: new Date(),
-          },
-        },
-      },
-      { new: true }
-    );
   }
 
   async softDelete(id: string, deletedBy: string): Promise<ITaskRequest | null> {
