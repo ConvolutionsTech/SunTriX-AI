@@ -2011,6 +2011,8 @@ VITE_API_URL=https://suntrix-backend.onrender.com/v1
 
 ---
 
+**Headers (`vercel.json`).** Every page gets HSTS (2 years, preload), `nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and a Permissions-Policy. `index.html` and routes are `no-cache`; hashed files under `/assets/` are cached for a year (`immutable`). The Content-Security-Policy ships as **Report-Only**: check the browser console on the live site (public pages, admin, proposal/contract/invoice/tracker pages, Stripe redirect, YouTube/Vimeo embeds), then rename the header to `Content-Security-Policy` and narrow `connect-src` to the API and Sentry domains.
+
 ### 12.3 Environment Variables (Full Reference)
 
 | Variable | Required | Description | Set In |

@@ -57,7 +57,22 @@ app.use(httpLogger());
 app.use(metricsMiddleware());
 
 // ─── Security ────────────────────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+// A JSON API: no CSP needed; HSTS for two years, never framed
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+    hsts: { maxAge: 63072000, includeSubDomains: true },
+    frameguard: { action: "deny" },
+  })
+);
+
+// Sessions, settings and capability-link responses must never be cached by browsers or proxies
+const NO_STORE = /^\/v1\/(auth|settings|admin|proposals|contracts|tracker|payments\/invoice|task-requests\/track|newsletter\/(confirm|unsubscribe))(\/|$)/;
+app.use((req, res, next) => {
+  if (NO_STORE.test(req.path)) res.setHeader("Cache-Control", "no-store");
+  next();
+});
 
 // ─── CORS ────────────────────────────────────────────────────────
 // FRONTEND_URL + CORS_ORIGINS; localhost dev servers only outside production (lib/cors.ts).
