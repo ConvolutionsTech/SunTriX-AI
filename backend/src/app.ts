@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "./config/mongoose"; // before any model is compiled
 import { loadSettingsFromDB, getSetting } from "./lib/configLoader";
 import express from "express";
 import cors from "cors";

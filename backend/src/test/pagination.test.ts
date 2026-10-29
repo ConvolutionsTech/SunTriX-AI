@@ -48,7 +48,7 @@ describe("bounded list endpoints (T-OPB-12, T-BR-7)", () => {
   it("the tracker list returns summaries and can find one engagement's tracker", async () => {
     const task = await TaskRequest.create({ name: "Ada", email: "ada@client.test", service: "AI", description: "A long enough description.", status: "in_progress" });
     await ProjectTracker.create({
-      taskRequestId: task._id, trackerToken: "trk_page", clientName: "Ada", clientEmail: "ada@client.test", projectTitle: "X",
+      taskRequestId: task._id, trackerToken: "trk_page",
       proposalId: "64b0000000000000000000aa",
       updates: [{ type: "ProgressUpdate", body: "Kick-off done" }],
     });

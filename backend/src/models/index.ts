@@ -1,4 +1,5 @@
 /** Importing this module registers every Mongoose model (used by scripts). */
+import "../config/mongoose";
 import "./Admin";
 import "./AiUsage";
 import "./AuditLog";

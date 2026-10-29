@@ -25,3 +25,6 @@ if (!uri) {
       "Point it at a disposable database whose name contains '_test'."
   );
 }
+
+// Unknown fields throw in tests (see config/mongoose.ts); must load before any model
+import "../config/mongoose";

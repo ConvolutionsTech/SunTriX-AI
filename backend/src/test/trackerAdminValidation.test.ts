@@ -28,7 +28,7 @@ describe("tracker admin validation (T-LC-10)", () => {
     auth = { Authorization: `Bearer ${await staffToken("admin")}` };
     const task = await TaskRequest.create({ name: "Ada", email: "ada@client.test", service: "AI", description: "A long enough description.", status: "in_progress" });
     const tracker = await ProjectTracker.create({
-      taskRequestId: task._id, proposalId: "64b0000000000000000000aa", trackerToken: "trk_val", clientName: "Ada", clientEmail: "ada@client.test", projectTitle: "X",
+      taskRequestId: task._id, proposalId: "64b0000000000000000000aa", trackerToken: "trk_val",
       deliverables: [{ title: "Spec" }],
     });
     trackerId = String(tracker._id);

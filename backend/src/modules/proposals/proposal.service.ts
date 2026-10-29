@@ -40,11 +40,11 @@ export class ProposalService {
 
   async createProposal(dto: CreateProposalDTO): Promise<IProposal> {
     const proposalToken = `prop_${crypto.randomBytes(16).toString("hex")}`;
-    const expiresInDays = dto.expiresInDays || 14;
+    const { expiresInDays = 14, ...fields } = dto;
     const expiresAt = new Date(Date.now() + expiresInDays * 86400000);
 
     const proposal = await this.proposalRepo.create({
-      ...dto,
+      ...fields,
       milestones: (dto.milestones || []).map((m, order) => ({ ...m, order })),
       proposalToken,
       expiresAt,
