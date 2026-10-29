@@ -6,6 +6,7 @@ import {
   ChevronRight, ChevronDown, ChevronUp, MessageSquare, ArrowRight,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 interface Milestone {
   title: string;
@@ -44,6 +45,8 @@ interface Proposal {
   clientEmail: string;
   expiresAt: string;
   acceptedAt?: string;
+  /** Set once accepted — links to the generated contract */
+  contractToken?: string;
   clientNote?: string;
   taskRequestId?: {
     projectTitle: string;
@@ -65,7 +68,7 @@ const ClientProposal = () => {
   const [changeNote, setChangeNote] = useState("");
   const [submittingChange, setSubmittingChange] = useState(false);
   const [showFullTerms, setShowFullTerms] = useState(false);
-  const [companyName, setCompanyName] = useState("SunTriX AI Solutions");
+  const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
     if (!token) { setError("Invalid proposal link."); setLoading(false); return; }
@@ -75,17 +78,15 @@ const ClientProposal = () => {
         if (err || !data) setError(err || "Proposal not found.");
         else {
           setProposal(data);
-          if (data.status === "accepted") setPhase("accepted");
+          if (data.status === "accepted") {
+            setPhase("accepted");
+            setContractToken(data.contractToken || sessionStorage.getItem(`contract-for-${token}`) || "");
+          }
           if (data.status === "changes_requested") setPhase("changes_submitted");
         }
     };
     
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data?.name) setCompanyName(data.data.name);
-    };
-
-    Promise.all([fetchProposal(), fetchCompany()]).finally(() => setLoading(false));
+    fetchProposal().finally(() => setLoading(false));
   }, [token]);
 
   const handleAccept = async () => {
@@ -100,6 +101,12 @@ const ClientProposal = () => {
       setPhase("view");
     } else {
       setContractToken(data.contractToken);
+      // Keep the "Review & Sign" link if the client refreshes this page
+      try {
+        sessionStorage.setItem(`contract-for-${token}`, data.contractToken);
+      } catch {
+        // Storage unavailable — the link still comes from the proposal once accepted
+      }
       setPhase("accepted");
     }
   };

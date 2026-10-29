@@ -76,10 +76,12 @@ const GROK_API_URL = "https://api.x.ai/v1";
 export const ENDPOINTS = {
   // Auth
   AUTH_LOGIN: `${BASE_URL}/auth/login`,
-  AUTH_REGISTER: `${BASE_URL}/auth/register`,
   AUTH_LOGOUT: `${BASE_URL}/auth/logout`,
   AUTH_ME: `${BASE_URL}/auth/me`,
   AUTH_REFRESH: `${BASE_URL}/auth/refresh`,
+  AUTH_PASSWORD: `${BASE_URL}/auth/password`,
+  AUTH_FORGOT: `${BASE_URL}/auth/forgot`,
+  AUTH_RESET: (token: string) => `${BASE_URL}/auth/reset/${token}`,
 
   // Contact & Requests
   CONTACT_SUBMIT: `${BASE_URL}/contact`,
@@ -95,7 +97,6 @@ export const ENDPOINTS = {
   // AI Chatbot (proxied through backend → Grok API)
   // Backend forwards to: https://api.x.ai/v1/chat/completions
   CHAT_SEND: `${BASE_URL}/chat`,
-  CHAT_HISTORY: `${BASE_URL}/chat/history`,
 
   // Portfolio & Case Studies
   PORTFOLIO_LIST: `${BASE_URL}/portfolio`,
@@ -120,6 +121,8 @@ export const ENDPOINTS = {
 
   // Newsletter
   NEWSLETTER_SUBSCRIBE: `${BASE_URL}/newsletter`,
+  NEWSLETTER_CONFIRM: (token: string) => `${BASE_URL}/newsletter/confirm/${token}`,
+  NEWSLETTER_UNSUBSCRIBE: (token: string) => `${BASE_URL}/newsletter/unsubscribe/${token}`,
   NEWSLETTER_LIST: `${BASE_URL}/newsletter`,
   NEWSLETTER_BROADCAST: `${BASE_URL}/newsletter/broadcast`,
   NEWSLETTER_GENERATE: `${BASE_URL}/newsletter/generate-template`,
@@ -143,9 +146,13 @@ export const ENDPOINTS = {
   ADMIN_DASHBOARD_STATS: `${BASE_URL}/admin/stats`,
   ADMIN_ACTIVITY: (days = 30) => `${BASE_URL}/admin/activity?days=${days}`,
   ADMIN_NOTIFICATIONS: `${BASE_URL}/admin/notifications`,
+  ADMIN_AI_USAGE: (days = 7) => `${BASE_URL}/admin/ai-usage?days=${days}`,
+  ADMIN_EMAIL_LOG: (status?: string) => `${BASE_URL}/admin/email-log${status ? `?status=${status}` : ""}`,
+  ADMIN_EMAIL_RETRY: (id: string) => `${BASE_URL}/admin/email-log/${id}/retry`,
   ADMIN_TASKS: `${BASE_URL}/task-requests`,
   ADMIN_CONTACTS: `${BASE_URL}/contact`,
   ADMIN_USERS: `${BASE_URL}/admin/users`,
+  ADMIN_USER: (id: string) => `${BASE_URL}/admin/users/${id}`,
 
   // Team
   TEAM_LIST: `${BASE_URL}/team`,
@@ -171,6 +178,7 @@ export const ENDPOINTS = {
   // Blog / Posts
   BLOG_LIST: `${BASE_URL}/posts`,
   BLOG_BY_SLUG: (slug: string) => `${BASE_URL}/posts/slug/${slug}`,
+  BLOG_BY_ID: (id: string) => `${BASE_URL}/posts/${id}`,
   BLOG_CREATE: `${BASE_URL}/posts`,
   BLOG_UPDATE: (id: string) => `${BASE_URL}/posts/${id}`,
   BLOG_DELETE: (id: string) => `${BASE_URL}/posts/${id}`,
@@ -184,36 +192,33 @@ export const ENDPOINTS = {
 
   // Campaigns
   CAMPAIGN_LIST: `${BASE_URL}/newsletter/campaigns`,
+  CAMPAIGN_RETRY: (id: string) => `${BASE_URL}/newsletter/admin/campaigns/${id}/retry`,
   CAMPAIGN_CREATE: `${BASE_URL}/newsletter/campaigns`,
-  CAMPAIGN_UPDATE: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}`,
-  CAMPAIGN_DELETE: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}`,
-  CAMPAIGN_SEND: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}/send`,
 
   // Assets (Cloudinary via backend)
   UPLOAD_IMAGE: `${BASE_URL}/upload/image`,
   UPLOAD_VIDEO: `${BASE_URL}/upload/video`,
   UPLOAD_DOCUMENT: `${BASE_URL}/upload/document`,
   UPLOAD_LIST: `${BASE_URL}/upload`,
-  UPLOAD_DELETE: (publicId: string) => `${BASE_URL}/upload/${btoa(publicId)}`,
+  UPLOAD_DELETE: (assetId: string) => `${BASE_URL}/upload/${encodeURIComponent(assetId)}`,
   UPLOAD_BULK_DELETE: `${BASE_URL}/upload/bulk`,
 
   // Payments (Stripe)
-  PAYMENT_CREATE_CHECKOUT: `${BASE_URL}/payments/create-checkout`,
-  PAYMENT_VERIFY: (sessionId: string) => `${BASE_URL}/payments/verify/${sessionId}`,
+  PAYMENT_INVOICE_CHECKOUT: (token: string) => `${BASE_URL}/payments/invoice/${token}/checkout`,
   PAYMENT_INVOICE: (token: string) => `${BASE_URL}/payments/invoice/${token}`,
   PAYMENT_ADMIN_LIST: `${BASE_URL}/payments/admin/list`,
   PAYMENT_ADMIN_STATS: `${BASE_URL}/payments/admin/stats`,
-  PAYMENT_ADMIN_CREATE_INVOICE: `${BASE_URL}/payments/admin/create-invoice`,
-  PAYMENT_ADMIN_CREATE_LINK: `${BASE_URL}/payments/admin/create-payment-link`,
+  PAYMENT_ADMIN_CREATE_INVOICE: `${BASE_URL}/payments/admin/invoice`,
   PAYMENT_ADMIN_REFUND: (id: string) => `${BASE_URL}/payments/admin/refund/${id}`,
 
   // Proposals
   PROPOSAL_ADMIN_AI_DRAFT:   `${BASE_URL}/proposals/admin/ai-draft`,
-  PROPOSAL_ADMIN_CREATE:     `${BASE_URL}/proposals/admin/create`,
+  PROPOSAL_ADMIN_CREATE:     `${BASE_URL}/proposals`,
   PROPOSAL_ADMIN_BY_TASK: (taskId: string) => `${BASE_URL}/proposals/admin/by-task/${taskId}`,
-  PROPOSAL_BY_TOKEN:      (token: string)  => `${BASE_URL}/proposals/${token}`,
-  PROPOSAL_ACCEPT:        (token: string)  => `${BASE_URL}/proposals/${token}/accept`,
-  PROPOSAL_REQUEST_CHANGES: (token: string) => `${BASE_URL}/proposals/${token}/request-changes`,
+  PROPOSAL_ADMIN_SEND: (id: string) => `${BASE_URL}/proposals/${id}/send`,
+  PROPOSAL_BY_TOKEN:      (token: string)  => `${BASE_URL}/proposals/view/${token}`,
+  PROPOSAL_ACCEPT:        (token: string)  => `${BASE_URL}/proposals/accept/${token}`,
+  PROPOSAL_REQUEST_CHANGES: (token: string) => `${BASE_URL}/proposals/request-changes/${token}`,
 
   // Contracts
   CONTRACT_BY_TOKEN:   (token: string) => `${BASE_URL}/contracts/${token}`,
@@ -229,6 +234,7 @@ export const ENDPOINTS = {
 
   // Project Tracker
   TRACKER_ADMIN_LIST:  `${BASE_URL}/tracker/admin/list`,
+  TRACKER_ADMIN_FOR_TASK: (taskId: string) => `${BASE_URL}/tracker/admin/list?taskRequestId=${taskId}`,
   TRACKER_ADMIN_BY_ID: (id: string) => `${BASE_URL}/tracker/admin/${id}`,
   TRACKER_ADMIN_AUDIT: (id: string) => `${BASE_URL}/tracker/admin/${id}/audit`,
   TRACKER_ADMIN_PHASE_ADVANCE:      (id: string) => `${BASE_URL}/tracker/admin/${id}/phase/advance`,
@@ -237,6 +243,7 @@ export const ENDPOINTS = {
   TRACKER_ADMIN_CHAT:               (id: string) => `${BASE_URL}/tracker/admin/${id}/chat`,
   TRACKER_ADMIN_FILE_UPLOAD:        (id: string) => `${BASE_URL}/tracker/admin/${id}/file/upload`,
   TRACKER_ADMIN_MILESTONE_PAYABLE:  (id: string, mId: string) => `${BASE_URL}/tracker/admin/${id}/milestone/${mId}/mark-payable`,
+  TRACKER_ADMIN_MILESTONE_PAID_MANUALLY: (id: string, mId: string) => `${BASE_URL}/tracker/admin/${id}/milestone/${mId}/mark-paid-manually`,
   TRACKER_CLIENT_BY_TOKEN:          (token: string) => `${BASE_URL}/tracker/client/${token}`,
   TRACKER_CLIENT_DELIVERABLE_APPROVE: (token: string, dId: string) => `${BASE_URL}/tracker/client/${token}/deliverable/${dId}/approve`,
   TRACKER_CLIENT_DELIVERABLE_REJECT:  (token: string, dId: string) => `${BASE_URL}/tracker/client/${token}/deliverable/${dId}/reject`,
@@ -274,87 +281,134 @@ import { authManager } from "./auth";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** JSON-serialisable value, or FormData for file uploads (sent as multipart) */
   body?: unknown;
   headers?: Record<string, string>;
+  /**
+   * Send the admin access token. Defaults to true on /admin pages and false
+   * elsewhere: public pages must not send it, because the API treats any
+   * Bearer header as "show drafts and hidden items".
+   */
+  auth?: boolean;
+}
+
+function onAdminPage(): boolean {
+  return typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+}
+
+function redirectToLogin() {
+  if (onAdminPage() && window.location.pathname !== "/admin/login") {
+    window.location.href = "/admin/login";
+  }
+}
+
+// Single-flight refresh: concurrent 401s share one POST /auth/refresh
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = authManager.getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(ENDPOINTS.AUTH_REFRESH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.token || !data?.refreshToken) return null;
+    authManager.setTokens(data.token, data.refreshToken);
+    return data.token as string;
+  } catch {
+    return null;
+  }
+}
+
+function getFreshToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+/**
+ * Human-readable message from any backend error body: `{ message }`,
+ * `{ error }`, or a validation failure `{ error, details: [{ field, message }] }`.
+ */
+export function errorMessage(body: unknown, status: number): string {
+  const b = (body && typeof body === "object" ? body : {}) as {
+    message?: unknown;
+    error?: unknown;
+    details?: Array<{ field?: string; message?: string }>;
+  };
+  if (Array.isArray(b.details) && b.details.length) {
+    return b.details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join("; ");
+  }
+  if (typeof b.message === "string" && b.message) return b.message;
+  if (typeof b.error === "string" && b.error) return b.error;
+  if (status === 429) return "Too many requests — please wait a moment and try again.";
+  if (status >= 500) return "The server ran into a problem. Please try again shortly.";
+  return `Request failed (${status})`;
 }
 
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
-): Promise<{ data: T | null; error: string | null }> {
-  const { method = "GET", body, headers = {} } = options;
+): Promise<{ data: T | null; error: string | null; status: number }> {
+  const { method = "GET", body, headers = {}, auth = onAdminPage() } = options;
 
-  try {
-    const token = authManager.getToken();
-    let res = await fetch(endpoint, {
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const send = (token: string | null) =>
+    fetch(endpoint, {
       method,
       headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Multipart bodies set their own Content-Type (with boundary)
+        ...(isForm ? {} : { "Content-Type": "application/json" }),
+        ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: isForm ? (body as FormData) : JSON.stringify(body) } : {}),
     });
 
-    if (res.status === 401 && endpoint !== ENDPOINTS.AUTH_REFRESH && endpoint !== ENDPOINTS.AUTH_LOGIN) {
-      const refreshToken = localStorage.getItem("refresh_token");
-      if (refreshToken) {
-        // Try to refresh
-        const refreshRes = await fetch(ENDPOINTS.AUTH_REFRESH, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+  try {
+    let res = await send(authManager.getToken());
 
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          if (refreshData.token && refreshData.refreshToken) {
-            localStorage.setItem("auth_token", refreshData.token);
-            localStorage.setItem("refresh_token", refreshData.refreshToken);
-            
-            // Retry the original request with the new token
-            res = await fetch(endpoint, {
-              method,
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${refreshData.token}`,
-                ...headers,
-              },
-              ...(body ? { body: JSON.stringify(body) } : {}),
-            });
-          } else {
-            // Refresh failed, clear tokens and redirect to login
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("suntrix_admin_session");
-            window.location.href = "/admin/login";
-            return { data: null, error: "Session expired. Please log in again." };
-          }
-        } else {
-          // Refresh failed, clear tokens and redirect to login
-          localStorage.removeItem("auth_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("suntrix_admin_session");
-          window.location.href = "/admin/login";
-          return { data: null, error: "Session expired. Please log in again." };
-        }
-      } else {
-        // No refresh token available, force logout
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("suntrix_admin_session");
-        window.location.href = "/admin/login";
-        return { data: null, error: "Session expired. Please log in again." };
+    // Only authenticated calls refresh or log out; a public 401 is just an error
+    if (res.status === 401 && auth && endpoint !== ENDPOINTS.AUTH_LOGIN && endpoint !== ENDPOINTS.AUTH_REFRESH) {
+      const token = await getFreshToken();
+      if (!token) {
+        authManager.clear();
+        redirectToLogin();
+        return { data: null, error: "Session expired. Please log in again.", status: 401 };
       }
+      res = await send(token);
     }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Request failed" }));
-      return { data: null, error: err.message || `Error ${res.status}` };
+      const err = await res.json().catch(() => ({}));
+      return { data: null, error: errorMessage(err, res.status), status: res.status };
     }
 
     const data = await res.json();
-    return { data, error: null };
+    return { data, error: null, status: res.status };
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Network error" };
+    return { data: null, error: err instanceof Error ? err.message : "Network error", status: 0 };
   }
+}
+
+/** Authenticated multipart upload with the same refresh and error handling as apiRequest. */
+export function apiUpload<T = unknown>(endpoint: string, formData: FormData) {
+  return apiRequest<T>(endpoint, { method: "POST", body: formData, auth: true });
+}
+
+/** Ends the admin session: best-effort server notification, then local clear. */
+export async function logout(): Promise<void> {
+  const token = authManager.getToken();
+  if (token) {
+    await fetch(ENDPOINTS.AUTH_LOGOUT, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  }
+  authManager.clear();
 }

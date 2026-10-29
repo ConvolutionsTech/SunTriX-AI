@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Trash2, Bot, User } from "lucide-react";
 import { apiRequest, ENDPOINTS, type GrokChatMessage } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 export interface ChatMessage {
   id: string;
@@ -29,18 +30,23 @@ const saveChatMessage = (role: "user" | "assistant", content: string): ChatMessa
   current.push(msg);
   try {
     localStorage.setItem("suntrix_chat", JSON.stringify(current));
-  } catch (_) {}
+  } catch {
+    // Storage unavailable (private mode, quota) — chat history is best-effort
+  }
   return msg;
 };
 
 const clearChatHistory = () => {
   try {
     localStorage.removeItem("suntrix_chat");
-  } catch (_) {}
+  } catch {
+    // Storage unavailable — nothing to clear
+  }
 };
 
 interface PublicSettings {
   CHATBOT_ENABLED: string;
+  AI_ENABLED?: string;
   CHATBOT_NAME: string;
   CHATBOT_WELCOME_MESSAGE: string;
   CHATBOT_MAX_WORDS: string;
@@ -58,33 +64,25 @@ const DEFAULT_SETTINGS: PublicSettings = {
   BRAND_EMAIL: "hello@suntrix.com",
 };
 
-interface CompanyInfo {
-  name?: string;
-  email?: string;
-}
-
 const AIChatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [config, setConfig] = useState<PublicSettings>(DEFAULT_SETTINGS);
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>({});
+  const companyInfo = useCompanyInfo();
   const [configLoaded, setConfigLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── Fetch public settings on mount ─────────────────────────────
   useEffect(() => {
-    Promise.all([
-      apiRequest<PublicSettings>(ENDPOINTS.SETTINGS_PUBLIC).then(({ data }) => {
+    apiRequest<PublicSettings>(ENDPOINTS.SETTINGS_PUBLIC)
+      .then(({ data }) => {
         if (data) setConfig({ ...DEFAULT_SETTINGS, ...data });
-      }),
-      apiRequest<{ data: CompanyInfo }>(ENDPOINTS.CMS_COMPANY).then(({ data }) => {
-        if (data?.data) setCompanyInfo(data.data);
       })
-    ]).finally(() => {
-      setConfigLoaded(true);
-    });
+      .finally(() => {
+        setConfigLoaded(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -140,7 +138,7 @@ const AIChatbot = () => {
   if (!configLoaded) return null;
 
   // Respect CHATBOT_ENABLED setting from admin
-  if (config.CHATBOT_ENABLED === "false") return null;
+  if (config.CHATBOT_ENABLED === "false" || config.AI_ENABLED === "false") return null;
 
   const dynamicBrandName = companyInfo.name || config.BRAND_NAME;
   const defaultBotName = dynamicBrandName.includes("SunTriX") ? "SunTriX AI" : `${dynamicBrandName} AI`;

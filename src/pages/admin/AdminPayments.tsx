@@ -115,10 +115,14 @@ export const AdminPayments = () => {
   };
 
   const handleRefund = async (paymentId: string) => {
-    if (!window.confirm("Are you sure you want to refund this transaction?")) return;
+    if (refundId || !window.confirm("Refund this payment in full through Stripe?")) return;
     setRefundId(paymentId);
-    await apiRequest(ENDPOINTS.PAYMENT_ADMIN_REFUND(paymentId), { method: "POST" });
+    const { data, error } = await apiRequest<{ message: string }>(ENDPOINTS.PAYMENT_ADMIN_REFUND(paymentId), {
+      method: "POST",
+      body: { reason: "requested_by_customer" },
+    });
     setRefundId(null);
+    window.alert(error || data?.message || "Refund requested.");
     fetchData();
   };
 

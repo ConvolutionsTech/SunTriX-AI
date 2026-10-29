@@ -1,16 +1,20 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Testimonial from "../models/Testimonial";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable } from "../middleware/bodyPolicy";
+
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
 
 const router = Router();
 
 // GET /testimonials — public
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const isAdmin = req.headers.authorization?.startsWith("Bearer ");
+    const isAdmin = !!req.user;
     const filter = isAdmin ? {} : { status: "published" };
-    const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 });
+    const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 }).limit(MAX_LIST);
     res.json(testimonials);
   } catch (err) {
     next(err);
@@ -18,7 +22,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /testimonials — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Testimonial), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const t = await Testimonial.create(req.body);
     res.status(201).json(t);
@@ -28,9 +32,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /testimonials/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Testimonial), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const t = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const t = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!t) return next(createError("Testimonial not found", 404));
     res.json(t);
   } catch (err) {

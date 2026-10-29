@@ -1,3 +1,5 @@
+import Proposal from "../../models/Proposal";
+import { stripeAdapter } from "../../integrations/stripe/stripe.adapter";
 import crypto from "crypto";
 import { taskRequestRepository, TaskRequestRepository } from "./task-request.repository";
 import { TaskStatusMachine, ActorRole } from "../../services/taskStatusMachine";
@@ -8,6 +10,7 @@ import ProjectTracker from "../../models/ProjectTracker";
 import Payment from "../../models/Payment";
 import TaskRequest from "../../models/TaskRequest";
 import { sendTaskNotification } from "../../services/email";
+import { logger } from "../../lib/logger";
 
 export class TaskRequestService {
   constructor(private repo: TaskRequestRepository = taskRequestRepository) {}
@@ -31,7 +34,7 @@ export class TaskRequestService {
       projectTitle: task.projectTitle,
       description: task.description,
       selectedPlan: task.selectedPlan,
-    }).catch(console.error);
+    }).catch((err) => logger.error({ err }, "Task notification email failed"));
 
     return { task, trackingToken };
   }
@@ -60,22 +63,34 @@ export class TaskRequestService {
     actorRole: ActorRole = "admin",
     note: string = ""
   ): Promise<ITaskRequest> {
-    const task = await this.repo.findById(id);
-    if (!task) throw new AppError("Task request not found", ERROR_CODES.NOT_FOUND);
+    return TaskStatusMachine.transition(id, newStatus, actorRole, note);
+  }
 
-    const currentStatus = task.status as TaskRequestStatus;
-    if (currentStatus === newStatus) return task;
-
-    if (!TaskStatusMachine.isValidTransition(currentStatus, newStatus, actorRole)) {
-      throw new AppError(
-        `Invalid status transition from '${currentStatus}' to '${newStatus}' by ${actorRole}.`,
-        ERROR_CODES.BAD_REQUEST
+  /**
+   * Cancels an engagement and everything still open on it: proposals can no
+   * longer be accepted, contracts signed or invoices paid (open Stripe sessions
+   * are expired). Refused while the client has a paid, un-refunded payment —
+   * refund first, or pass force with a reason.
+   */
+  async cancelEngagement(id: string, note: string, force = false): Promise<ITaskRequest> {
+    const paid = await Payment.countDocuments({ taskRequestId: id, status: "paid" });
+    if (paid > 0 && !force) {
+      throw Object.assign(
+        new AppError("This engagement has a paid invoice. Refund it first, or confirm cancelling anyway.", ERROR_CODES.CONFLICT),
+        { code: "HAS_PAID_PAYMENTS" }
       );
     }
 
-    const updated = await this.repo.updateStatus(id, newStatus, note);
-    if (!updated) throw new AppError("Failed to update status", ERROR_CODES.INTERNAL_SERVER_ERROR);
-    return updated;
+    const task = await TaskStatusMachine.transition(id, "cancelled", "admin", note || "Cancelled by admin");
+
+    await Proposal.updateMany({ taskRequestId: id, status: { $in: ["draft", "sent", "changes_requested", "processing"] } }, { $set: { status: "rejected" } });
+    await Contract.updateMany({ taskRequestId: id, status: "pending" }, { $set: { status: "expired" } });
+    const openInvoices = await Payment.find({ taskRequestId: id, status: "pending" }).select("stripeSessionId").lean();
+    await Payment.updateMany({ taskRequestId: id, status: "pending" }, { $set: { status: "cancelled" }, $unset: { stripeSessionId: 1, sessionExpiresAt: 1 } });
+    for (const p of openInvoices) {
+      if (p.stripeSessionId) await stripeAdapter.expireCheckoutSession(p.stripeSessionId);
+    }
+    return task;
   }
 
   async getAllTasks(filter: Record<string, unknown> = {}, limit = 100, skip = 0): Promise<{ tasks: ITaskRequest[]; total: number }> {
@@ -91,7 +106,7 @@ export class TaskRequestService {
   async updateTask(id: string, data: Record<string, unknown>): Promise<ITaskRequest> {
     const task = await this.repo.findById(id);
     if (!task) throw new AppError("Task request not found", ERROR_CODES.NOT_FOUND);
-    const updated = await TaskRequest.findOneAndUpdate({ _id: id, deletedAt: null }, data, { new: true });
+    const updated = await TaskRequest.findOneAndUpdate({ _id: id, deletedAt: null }, { $set: data }, { new: true, runValidators: true });
     if (!updated) throw new AppError("Failed to update task", ERROR_CODES.INTERNAL_SERVER_ERROR);
     return updated;
   }

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import deptPlatform from "@/assets/dept-platform.png";
+import { safeHref } from "@/lib/sanitize";
 
 /** Each tech item: name shown, SVG logo URL (Simple Icons CDN = https://cdn.simpleicons.org/<slug>/<hex>), official link */
 const techCategories = [
@@ -91,7 +92,7 @@ const TechStackSection = () => {
                     {cat.items.map((tech) => (
                       <motion.a
                         key={tech.name}
-                        href={tech.url}
+                        href={safeHref(tech.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         whileHover={{ scale: 1.05, y: -2 }}

@@ -1,36 +1,48 @@
 import { Resend } from "resend";
 import { getSetting } from "../../lib/configLoader";
+import { emailSends } from "../../lib/metrics";
+
+/** Counts every Resend call by outcome (Resend reports most failures as { error }, not a throw). */
+function counted<T extends { error?: unknown }>(kind: "single" | "batch", send: (payload: any, options?: any) => Promise<T>) {
+  return async (payload: any, options?: any): Promise<T> => {
+    try {
+      const res = await send(payload, options);
+      emailSends.inc({ kind, result: res?.error ? "error" : "ok" });
+      return res;
+    } catch (err) {
+      emailSends.inc({ kind, result: "error" });
+      throw err;
+    }
+  };
+}
 
 export class ResendAdapter {
   private getClient(): Resend {
     const apiKey = getSetting("RESEND_API_KEY");
-    return new Resend(apiKey || "re_dummy_key");
-  }
-
-  private getFromAddress(): string {
-    return getSetting("EMAIL_FROM", "SunTriX <notifications@suntrix.com>");
+    // Fail loudly instead of sending with a dummy key and logging "API key is invalid"
+    if (!apiKey) throw Object.assign(new Error("Email is not configured (RESEND_API_KEY is not set)"), { code: "EMAIL_NOT_CONFIGURED" });
+    return new Resend(apiKey);
   }
 
   public get emails(): any {
     const client = this.getClient();
-    return client.emails;
+    return { send: counted("single", (payload: any, options?: any) => client.emails.send(payload, options)) };
   }
 
   public get batch(): any {
     const client = this.getClient();
-    return client.batch;
+    return { send: counted("batch", (payload: any, options?: any) => client.batch.send(payload, options)) };
   }
 
   async sendEmail(params: {
     to: string | string[];
     subject: string;
     html: string;
-    from?: string;
+    from: string;
   }): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
-      const client = this.getClient();
-      const res = await client.emails.send({
-        from: params.from || this.getFromAddress(),
+      const res = await this.emails.send({
+        from: params.from,
         to: Array.isArray(params.to) ? params.to : [params.to],
         subject: params.subject,
         html: params.html,
@@ -46,18 +58,17 @@ export class ResendAdapter {
   }
 
   async sendBatchEmails(
-    emails: Array<{ to: string[]; subject: string; html: string; from?: string }>
+    emails: Array<{ to: string[]; subject: string; html: string; from: string }>
   ): Promise<{ success: boolean; count: number; error?: string }> {
     try {
-      const client = this.getClient();
       const payload = emails.map((e) => ({
-        from: e.from || this.getFromAddress(),
+        from: e.from,
         to: e.to,
         subject: e.subject,
         html: e.html,
       }));
 
-      const res = await client.batch.send(payload);
+      const res = await this.batch.send(payload);
       if (res.error) {
         return { success: false, count: 0, error: res.error.message };
       }

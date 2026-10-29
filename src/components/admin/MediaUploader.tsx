@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, FileText, Film, Image, Loader2, File } from "lucide-react";
-import { ENDPOINTS } from "@/lib/api";
+import { ENDPOINTS, apiUpload } from "@/lib/api";
+import { safeHref } from "@/lib/sanitize";
 
 export interface MediaAttachment {
   url: string;
@@ -54,28 +55,17 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
   const [errors, setErrors] = useState<string[]>([]);
 
   const uploadFile = async (file: File): Promise<MediaAttachment | null> => {
-    const token = localStorage.getItem("auth_token");
     const type = getFileType(file.name);
 
-    let endpoint = ENDPOINTS.UPLOAD_IMAGE;
+    let endpoint: string = ENDPOINTS.UPLOAD_IMAGE;
     if (type === "video") endpoint = ENDPOINTS.UPLOAD_VIDEO;
     else if (type === "document") endpoint = ENDPOINTS.UPLOAD_DOCUMENT;
 
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Upload failed" }));
-      throw new Error(err.message || "Upload failed");
-    }
-
-    const data = await res.json();
+    const { data, error } = await apiUpload<{ url?: string; secureUrl?: string; publicId?: string; _id?: string }>(endpoint, formData);
+    if (error || !data) throw new Error(error || "Upload failed");
     return {
       url: data.url || data.secureUrl,
       type,
@@ -211,7 +201,7 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
                 )}
                 {att.type === "document" && (
                   <a
-                    href={att.url}
+                    href={safeHref(att.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex flex-col items-center justify-center h-24 gap-2 hover:bg-muted/60 transition-colors"

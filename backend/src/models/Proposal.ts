@@ -6,7 +6,8 @@ export type ProposalStatus =
   | "processing"
   | "accepted"
   | "changes_requested"
-  | "rejected";
+  | "rejected"
+  | "expired";
 
 export interface IMilestone {
   title: string;
@@ -46,6 +47,8 @@ export interface IProposal extends Document {
   aiDrafted: boolean;
   expiresAt: Date;
   acceptedAt?: Date;
+  /** Contract generated when the client accepted */
+  contractToken?: string;
   clientNote?: string;         // message from client on change request
   createdAt: Date;
   updatedAt: Date;
@@ -91,18 +94,20 @@ const ProposalSchema = new Schema<IProposal>(
     nextSteps:                 { type: String, default: "" },
     status: {
       type: String,
-      enum: ["draft", "sent", "processing", "accepted", "changes_requested", "rejected"],
+      enum: ["draft", "sent", "processing", "accepted", "changes_requested", "rejected", "expired"],
       default: "draft",
     },
     aiDrafted:   { type: Boolean, default: false },
     expiresAt:   { type: Date, required: true },
     acceptedAt:  { type: Date },
     clientNote:  { type: String, default: "" },
+    contractToken: { type: String },
   },
   { timestamps: true }
 );
 
 ProposalSchema.index({ taskRequestId: 1 });
 ProposalSchema.index({ clientEmail: 1 });
+ProposalSchema.index({ status: 1, expiresAt: 1 }); // expiry job
 
 export default mongoose.model<IProposal>("Proposal", ProposalSchema);

@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { apiRequest, ENDPOINTS } from "../lib/api";
+import { apiRequest, ENDPOINTS } from "@/lib/api";
 import {
   CheckCircle2, Clock, FileText, MessageSquare, Send, CreditCard,
   ExternalLink, XCircle, CheckCircle, AlertCircle, Download, Package,
   RefreshCw, ThumbsUp, ThumbsDown, Bell
 } from "lucide-react";
 import Layout from "../components/Layout";
-import { toast } from "react-hot-toast";
+import { notify } from "@/lib/notify";
+import { safeHref } from "@/lib/sanitize";
 
 const phases = ["Discovery", "Design", "Development", "Testing", "Delivery"];
 
@@ -42,14 +43,14 @@ const ClientProjectHub = () => {
   useEffect(() => {
     if (token) fetchTracker();
     // Polling for chat & live updates
-    const interval = setInterval(() => { if (token) fetchTracker(true); }, 8000);
+    const interval = setInterval(() => { if (token && !document.hidden) fetchTracker(true); }, 8000);
     return () => clearInterval(interval);
   }, [token]);
 
   // Show paid toast if redirected from Stripe
   useEffect(() => {
     if (searchParams.get("paid") === "1") {
-      toast.success("🎉 Payment confirmed! Your project is moving forward.");
+      notify.success("🎉 Payment confirmed! Your project is moving forward.");
     }
   }, []);
 
@@ -60,8 +61,8 @@ const ClientProjectHub = () => {
 
   const handleApproveDeliverable = async (dId: string) => {
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_DELIVERABLE_APPROVE(token!, dId), { method: "POST" });
-    if (error) return toast.error("Failed to approve.");
-    toast.success("✅ Deliverable approved!");
+    if (error) return notify.error("Failed to approve.");
+    notify.success("✅ Deliverable approved!");
     fetchTracker(true);
   };
 
@@ -69,15 +70,15 @@ const ClientProjectHub = () => {
     const note = prompt("Please describe what changes you need:");
     if (!note) return;
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_DELIVERABLE_REJECT(token!, dId), { method: "POST", body: { clientRejectionNote: note } });
-    if (error) return toast.error("Failed to request changes.");
-    toast.success("Changes requested. We'll get right on it!");
+    if (error) return notify.error("Failed to request changes.");
+    notify.success("Changes requested. We'll get right on it!");
     fetchTracker(true);
   };
 
   const handleApproveFile = async (fId: string) => {
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_FILE_APPROVE(token!, fId), { method: "POST" });
-    if (error) return toast.error("Failed to approve file.");
-    toast.success("File approved!");
+    if (error) return notify.error("Failed to approve file.");
+    notify.success("File approved!");
     fetchTracker(true);
   };
 
@@ -85,15 +86,15 @@ const ClientProjectHub = () => {
     const comment = prompt("What changes are needed for this file?");
     if (!comment) return;
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_FILE_REJECT(token!, fId), { method: "POST", body: { clientComment: comment } });
-    if (error) return toast.error("Failed to reject file.");
-    toast.success("Feedback submitted.");
+    if (error) return notify.error("Failed to reject file.");
+    notify.success("Feedback submitted.");
     fetchTracker(true);
   };
 
   const handleAcknowledgeUpdate = async (uId: string) => {
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_UPDATE_ACK(token!, uId), { method: "POST" });
-    if (error) return toast.error("Failed to acknowledge.");
-    toast.success("Update acknowledged!");
+    if (error) return notify.error("Failed to acknowledge.");
+    notify.success("Update acknowledged!");
     fetchTracker(true);
   };
 
@@ -101,8 +102,8 @@ const ClientProjectHub = () => {
     setPayingMilestone(mId);
     const { data, error } = await apiRequest<any>(ENDPOINTS.TRACKER_CLIENT_MILESTONE_CHECKOUT(token!, mId), { method: "POST" });
     setPayingMilestone(null);
-    if (error) return toast.error("Failed to initiate payment. Please try again.");
-    if (data?.alreadyPaid) return toast.success("This milestone is already paid!");
+    if (error) return notify.error("Failed to initiate payment. Please try again.");
+    if (data?.alreadyPaid) return notify.success("This milestone is already paid!");
     if (data?.checkoutUrl) window.location.href = data.checkoutUrl;
   };
 
@@ -121,7 +122,7 @@ const ClientProjectHub = () => {
 
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_CHAT(token!), { method: "POST", body: { text: msg } });
     setSendingChat(false);
-    if (error) { toast.error("Failed to send message."); fetchTracker(true); }
+    if (error) { notify.error("Failed to send message."); fetchTracker(true); }
   };
 
   const [approvingCompletion, setApprovingCompletion] = useState(false);
@@ -130,8 +131,8 @@ const ClientProjectHub = () => {
     setApprovingCompletion(true);
     const { error } = await apiRequest(ENDPOINTS.TRACKER_CLIENT_COMPLETION_APPROVE(token!), { method: "POST" });
     setApprovingCompletion(false);
-    if (error) return toast.error("Failed to approve completion. Please try again.");
-    toast.success("Project marked as completed! Thank you!");
+    if (error) return notify.error("Failed to approve completion. Please try again.");
+    notify.success("Project marked as completed! Thank you!");
     fetchTracker(true);
   };
 
@@ -379,7 +380,7 @@ const ClientProjectHub = () => {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {d.attachedUrl && (
-                      <a href={d.attachedUrl} target="_blank" rel="noreferrer"
+                      <a href={safeHref(d.attachedUrl)} target="_blank" rel="noreferrer"
                         className="flex items-center gap-1 text-sm text-primary hover:underline border border-primary/30 px-3 py-1.5 rounded-lg">
                         <ExternalLink className="h-3.5 w-3.5" /> View Work
                       </a>
@@ -429,7 +430,7 @@ const ClientProjectHub = () => {
                       <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-lg italic">"{f.clientComment}"</p>
                     )}
                     <div className="flex items-center gap-2">
-                      <a href={f.cloudinaryUrl} target="_blank" rel="noreferrer"
+                      <a href={safeHref(f.cloudinaryUrl)} target="_blank" rel="noreferrer"
                         className="flex-1 text-center text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-primary/5">
                         View / Download
                       </a>

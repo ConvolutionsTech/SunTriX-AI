@@ -14,6 +14,18 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  build: {
+    rollupOptions: {
+      output: {
+        // Heavy libraries get their own cacheable chunks (and stay out of pages that don't use them)
+        manualChunks: {
+          charts: ["recharts"],
+          editor: ["react-quill"],
+          motion: ["framer-motion"],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

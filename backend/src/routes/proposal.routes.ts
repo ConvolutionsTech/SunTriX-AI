@@ -1,3 +1,4 @@
+import { toClientProposal } from "../lib/clientDto";
 import { Router, Request, Response, NextFunction } from "express";
 import { proposalService } from "../modules/proposals/proposal.service";
 import { requireAuth } from "../middleware/auth";
@@ -16,7 +17,16 @@ router.post("/admin/ai-draft", requireAuth, validate(ProposalGenerateSchema), as
   }
 });
 
-// POST /proposals — create a proposal draft
+// GET /proposals/admin/by-task/:taskId — every proposal for a request, newest first
+router.get("/admin/by-task/:taskId", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ proposals: await proposalService.listForTask(req.params.taskId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /proposals — create a proposal draft (amounts in integer cents)
 router.post("/", requireAuth, validate(ProposalCreateSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const proposal = await proposalService.createProposal(req.body);
@@ -42,7 +52,7 @@ router.post("/:id/send", requireAuth, async (req: Request, res: Response, next: 
 router.get("/view/:token", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const proposal = await proposalService.getByToken(req.params.token);
-    res.json(proposal);
+    res.json(toClientProposal(proposal));
   } catch (err) {
     next(err);
   }
@@ -55,7 +65,7 @@ router.post("/accept/:token", async (req: Request, res: Response, next: NextFunc
     res.json({
       message: "Proposal accepted successfully. Legal contract generated.",
       contractToken: result.contractToken,
-      proposal: result.proposal,
+      proposal: toClientProposal(result.proposal),
     });
   } catch (err) {
     next(err);
@@ -65,8 +75,8 @@ router.post("/accept/:token", async (req: Request, res: Response, next: NextFunc
 // POST /proposals/request-changes/:token — PUBLIC client requests changes
 router.post("/request-changes/:token", validate(ProposalRequestChangesSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const proposal = await proposalService.requestChanges(req.params.token, req.body.notes);
-    res.json({ message: "Change request submitted. Our team will review and update the proposal.", proposal });
+    const proposal = await proposalService.requestChanges(req.params.token, req.body.clientNote);
+    res.json({ message: "Change request submitted. Our team will review and update the proposal.", proposal: toClientProposal(proposal) });
   } catch (err) {
     next(err);
   }

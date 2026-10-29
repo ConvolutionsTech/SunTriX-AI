@@ -9,14 +9,14 @@ export interface CreateProposalDTO {
   title: string;
   scopeItems?: string[];
   timeline?: string;
-  totalAmount: number; // in cents or dollars (will be converted safely)
+  totalAmount: number; // integer cents (validated: equals the sum of milestone amounts)
   currency?: string;
   milestones?: Array<{
     title: string;
     description?: string;
     amount: number;
     dueWeek: number;
-    order: number;
+    order?: number;
   }>;
   terms?: string;
   executiveSummary?: string;

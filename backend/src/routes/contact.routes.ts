@@ -1,14 +1,19 @@
 import { Router, Request, Response, NextFunction } from "express";
 import ContactMessage from "../models/ContactMessage";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
-import { validate, ContactSchema } from "../middleware/validate";
+import { validate, ContactSchema, ContactReplySchema } from "../middleware/validate";
+import { escapeHtml } from "../lib/escapeHtml";
+import { logAudit } from "../lib/audit";
 import { sendContactNotification } from "../services/email";
+import { logger } from "../lib/logger";
+import { formLimiter } from "../middleware/rateLimiters";
+import { pageParams, setTotal } from "../middleware/pagination";
 
 const router = Router();
 
 // POST /contact — public
-router.post("/", validate(ContactSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", formLimiter(), validate(ContactSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, message, company, subject } = req.body;
     // No need for manual required checks — Zod validate() handles them above
@@ -27,7 +32,7 @@ router.post("/", validate(ContactSchema), async (req: Request, res: Response, ne
       company: msg.company,
       subject: msg.subject,
       message: msg.message,
-    }).catch(console.error);
+    }).catch((err) => logger.error({ err }, "Contact notification email failed"));
 
     res.status(201).json({ message: "Message sent successfully" });
   } catch (err) {
@@ -39,7 +44,12 @@ router.post("/", validate(ContactSchema), async (req: Request, res: Response, ne
 router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filter = req.query.unread === "true" ? { read: false } : {};
-    const messages = await ContactMessage.find(filter).sort({ createdAt: -1 });
+    const { limit, skip } = pageParams(req, { defaultLimit: 200, maxLimit: 500 });
+    const [messages, total] = await Promise.all([
+      ContactMessage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      ContactMessage.countDocuments(filter),
+    ]);
+    setTotal(res, total);
     res.json(messages);
   } catch (err) {
     next(err);
@@ -57,21 +67,20 @@ router.put("/:id/read", requireAuth, async (req: Request, res: Response, next: N
   }
 });
 
-// POST /contact/reply — admin
-router.post("/reply", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+// POST /contact/reply — admin replies to a stored message (not an open relay)
+router.post("/reply", requireAuth, validate(ContactReplySchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { toEmail, subject, body, messageId } = req.body;
-    if (!toEmail || !subject || !body) {
-      return next(createError("Email, subject, and body are required", 400));
-    }
+    const { subject, body, messageId } = req.body;
+    const message = await ContactMessage.findById(messageId);
+    if (!message) return next(createError("Message not found", 404));
 
+    // The reply is typed as plain text: escape it and keep its line breaks
+    const html = `<div style="font-family: sans-serif; white-space: normal;">${escapeHtml(body).replace(/\n/g, "<br>")}</div>`;
     const { sendDirectReply } = await import("../services/email");
-    await sendDirectReply(toEmail, subject, body);
+    await sendDirectReply(message.email, subject, html);
 
-    if (messageId) {
-      await ContactMessage.findByIdAndUpdate(messageId, { read: true });
-    }
-
+    await ContactMessage.findByIdAndUpdate(messageId, { read: true });
+    await logAudit(req, "reply", "contact", messageId, message.email);
     res.json({ message: "Reply sent successfully" });
   } catch (err) {
     next(err);

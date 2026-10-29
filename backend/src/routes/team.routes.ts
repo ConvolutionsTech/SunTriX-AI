@@ -1,23 +1,28 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Team from "../models/Team";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
+
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
 
 const router = Router();
 
 // GET /team — public (visible only)
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const showAll = req.query.all === "true" || req.headers.authorization?.startsWith("Bearer ");
+    // Hidden/draft items only for a verified staff token — never for a bare Bearer header
+    const showAll = !!req.user;
     const filter = showAll ? {} : { isVisible: true };
-    const members = await Team.find(filter).sort({ order: 1, createdAt: 1 });
+    const members = await Team.find(filter).sort({ order: 1, createdAt: 1 }).limit(MAX_LIST);
     res.json(members);
   } catch (err) { next(err); }
 });
 
 // PUT /team/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -32,7 +37,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // DELETE /team/bulk — admin bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -43,7 +48,7 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // POST /team/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Team), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
@@ -64,7 +69,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 });
 
 // POST /team — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Team), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const member = await Team.create(req.body);
     await logAudit(req, "create", "team", member._id.toString(), member.name);
@@ -73,9 +78,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /team/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Team), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const member = await Team.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const member = await Team.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!member) return next(createError("Team member not found", 404));
     await logAudit(req, "update", "team", member._id.toString(), member.name);
     res.json(member);

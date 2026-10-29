@@ -1,14 +1,15 @@
 import { Router, Request, Response, NextFunction } from "express";
 import CaseStudy from "../models/CaseStudy";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable } from "../middleware/bodyPolicy";
 
 const router = Router();
 
 // GET /case-studies
-router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const studies = await CaseStudy.find().sort({ createdAt: -1 });
+    const studies = await CaseStudy.find(req.user ? {} : { status: "published" }).sort({ createdAt: -1 });
     res.json(studies);
   } catch (err) {
     next(err);
@@ -16,9 +17,9 @@ router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /case-studies/slug/:slug
-router.get("/slug/:slug", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/slug/:slug", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const study = await CaseStudy.findOne({ slug: req.params.slug }).populate("projectId");
+    const study = await CaseStudy.findOne({ slug: req.params.slug, ...(req.user ? {} : { status: "published" }) }).populate("projectId");
     if (!study) return next(createError("Case study not found", 404));
     res.json(study);
   } catch (err) {
@@ -27,9 +28,9 @@ router.get("/slug/:slug", async (req: Request, res: Response, next: NextFunction
 });
 
 // GET /case-studies/:id
-router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const study = await CaseStudy.findById(req.params.id).populate("projectId");
+    const study = await CaseStudy.findOne({ _id: req.params.id, ...(req.user ? {} : { status: "published" }) }).populate("projectId");
     if (!study) return next(createError("Case study not found", 404));
     res.json(study);
   } catch (err) {
@@ -38,7 +39,7 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /case-studies — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(CaseStudy), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const study = await CaseStudy.create(req.body);
     res.status(201).json(study);
@@ -49,9 +50,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /case-studies/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(CaseStudy), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const study = await CaseStudy.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const study = await CaseStudy.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!study) return next(createError("Case study not found", 404));
     res.json(study);
   } catch (err) {

@@ -1,28 +1,35 @@
-import Groq from "groq-sdk";
 import { getSetting } from "../lib/configLoader";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
+import { toCents } from "../lib/money";
+import { logger } from "../lib/logger";
+import { meteredCompletion } from "../lib/aiBudget";
 
-// ─── Lazy client factory ────────────────────────────────────────────────────
-// Creates a new Groq instance reading the CURRENT api key each call.
-// This means the admin can rotate the key and it takes effect immediately.
-function getGroqClient(): Groq {
-  const apiKey = getSetting("GROQ_API_KEY");
-  if (!apiKey) throw new Error("GROQ_API_KEY is not configured. Set it in Admin → Settings → AI.");
-  return new Groq({ apiKey, dangerouslyAllowBrowser: true });
-}
+// Shared client from the adapter (cached per key, bounded timeout)
+/** Groq client whose completions go through the AI budget and usage log. */
+const getGroqClient = (operation: string) => {
+  const client = groqAdapter.getClient();
+  return {
+    chat: {
+      completions: {
+        create: (params: Parameters<typeof client.chat.completions.create>[0] & { stream?: false }) =>
+          meteredCompletion(operation, () => client.chat.completions.create(params) as Promise<import("groq-sdk").default.Chat.Completions.ChatCompletion>, params.model),
+      },
+    },
+  };
+};
 
 // ─── Dynamic model + param helpers ────────────────────────────────────────
 const getChatModel     = () => getSetting("GROQ_CHAT_MODEL",     "llama-3.1-8b-instant");
 const getExtractModel  = () => getSetting("GROQ_EXTRACT_MODEL",  "llama-3.1-8b-instant");
 const getEmailTemp     = () => parseFloat(getSetting("GROQ_EMAIL_TEMPERATURE",   "0.4"));
-const getEmailTokens   = () => parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS",      "2048"));
+const getEmailTokens   = () => parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS",      "4096"));
 
 // ─── Dynamic system prompt ─────────────────────────────────────────────────
 // Admin can either supply a full custom prompt via CHATBOT_SYSTEM_PROMPT,
 // or let the system auto-build one from brand settings.
 function buildSystemPrompt(): string {
-  const custom = getSetting("CHATBOT_SYSTEM_PROMPT");
-  if (custom && custom.trim().length > 50) return custom.trim();
+  const custom = getSetting("CHATBOT_SYSTEM_PROMPT").trim();
+  if (custom) return custom;
 
   const name          = getSetting("BRAND_NAME",             "SunTriX AI Solutions");
   const email         = getSetting("BRAND_EMAIL",            "hello@suntrix.com");
@@ -86,7 +93,7 @@ export async function sendChat(messages: ChatMessage[]): Promise<string> {
       messages: boundedMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     });
   } catch (err: any) {
-    console.error("Groq AI Error in sendChat:", err.message || err);
+    logger.error({ err }, "Groq AI Error in sendChat");
     if (err.status === 429) {
       return "The AI assistant is experiencing high demand. Please wait a moment and try again.";
     }
@@ -103,7 +110,7 @@ export async function generateEmailTemplate(prompt: string): Promise<string> {
     throw new Error("AI features are currently disabled.");
   }
 
-  const completion = await getGroqClient().chat.completions.create({
+  const completion = await getGroqClient("email-template").chat.completions.create({
     model: getChatModel(),
     messages: [
       {
@@ -198,7 +205,7 @@ async function jsonCall(
   maxTokens: number,
   temperature = 0.1
 ): Promise<Record<string, unknown>> {
-  const completion = await getGroqClient().chat.completions.create({
+  const completion = await getGroqClient("extract-json").chat.completions.create({
     model: getExtractModel(),
     messages: [
       { role: "system", content: systemPrompt },
@@ -268,7 +275,7 @@ Invent realistic, professional, specific content. Return ONLY valid JSON.`,
 
   // ── Blog: no JSON mode — HTML content inside JSON breaks it ───────────────
   if (module === "blog") {
-    const completion = await getGroqClient().chat.completions.create({
+    const completion = await getGroqClient("extract").chat.completions.create({
       model: getExtractModel(),
       messages: [
         {
@@ -323,7 +330,8 @@ export async function draftProposalWithAI(data: {
   scopeOfWork:               string;
   deliverables:              string;
   timeline:                  string;
-  milestones:   { title: string; description: string; amount: number; dueWeek: number }[];
+  milestones:   { title: string; description: string; amount: number; dueWeek: number }[]; // amount in cents
+  totalAmount:               number; // cents — sum of milestone amounts
   pricingBreakdown:          string;
   revisionsPolicy:           string;
   clientResponsibilities:    string;
@@ -372,13 +380,15 @@ Return ONLY valid JSON. No markdown wrappers. No extra text.`,
     scopeOfWork:               ensureString(result.scopeOfWork),
     deliverables:              ensureString(result.deliverables),
     timeline:                  ensureString(result.timeline),
-    milestones:                (result.milestones as any[]) || [],
+    // The model answers in dollars; the API takes integer cents
+    milestones:                ((result.milestones as any[]) || []).map((m) => ({ ...m, amount: toCents(m.amount) })),
     pricingBreakdown:          ensureString(result.pricingBreakdown),
     revisionsPolicy:           ensureString(result.revisionsPolicy),
     clientResponsibilities:    ensureString(result.clientResponsibilities),
     supportAndWarranty:        ensureString(result.supportAndWarranty),
     paymentTerms:              ensureString(result.paymentTerms),
     nextSteps:                 ensureString(result.nextSteps),
+    totalAmount:               ((result.milestones as any[]) || []).reduce((sum, m) => sum + toCents(m.amount), 0),
   };
 }
 
@@ -404,7 +414,7 @@ export async function generateContractWithAI(data: {
     .map((m, i) => `  Milestone ${i + 1}: ${m.title} — ${m.amount} (Due: Week ${m.dueWeek || "TBD"})`)
     .join("\n");
 
-  const completion = await getGroqClient().chat.completions.create({
+  const completion = await getGroqClient("contract").chat.completions.create({
     model: getChatModel(),
     messages: [
       {
@@ -443,7 +453,7 @@ End with a signature block for both parties. For the client, include a line: "Cl
       },
     ],
     temperature: 0.3,
-    max_tokens: parseInt(getSetting("GROQ_EMAIL_MAX_TOKENS", "4096")),
+    max_tokens: getEmailTokens(),
   });
 
   return completion.choices[0]?.message?.content || "Contract generation failed. Please contact us directly.";

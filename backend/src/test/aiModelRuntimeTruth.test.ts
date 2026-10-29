@@ -19,7 +19,7 @@ describe("Phase 5 Runtime Settings AI Model Truth & Validation", () => {
   });
 
   it("should verify groqAdapter passes the exact configured model to Groq client", async () => {
-    updateSettingCache("GROQ_API_KEY", "gsk_test_mock_key_for_testing");
+    process.env.GROQ_API_KEY = "gsk_test_mock_key_for_testing";
     updateSettingCache("GROQ_CHAT_MODEL", "gemma2-9b-it");
 
     const spy = vi.spyOn(groqAdapter, "generateChatCompletion").mockImplementation(async (params) => {

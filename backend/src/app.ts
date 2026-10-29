@@ -1,13 +1,21 @@
 import "dotenv/config";
+import "./config/mongoose"; // before any model is compiled
 import { loadSettingsFromDB, getSetting } from "./lib/configLoader";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import { logger, httpLogger } from "./lib/logger";
+import { initSentry } from "./lib/sentry";
+import { metricsMiddleware, metricsHandler } from "./lib/metrics";
+import { globalLimiter, authLimiter, chatLimiter } from "./middleware/rateLimiters";
+import { isAllowedOrigin } from "./lib/cors";
+import { auditWrites } from "./lib/audit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
+import { validateEnv } from "./config/env";
+import { parseTrustProxy } from "./lib/trustProxy";
 import { errorHandler } from "./middleware/errorHandler";
+import { AppError } from "./shared/errors/appError";
 
 // Route imports
 import authRoutes from "./routes/auth.routes";
@@ -22,6 +30,7 @@ import cmsRoutes from "./routes/cms.routes";
 import departmentRoutes from "./routes/department.routes";
 import uploadRoutes from "./routes/upload.routes";
 import adminRoutes from "./routes/admin.routes";
+import adminUserRoutes from "./routes/adminUsers.routes";
 import teamRoutes from "./routes/team.routes";
 import clientRoutes from "./routes/client.routes";
 import pricingRoutes from "./routes/pricing.routes";
@@ -32,72 +41,64 @@ import paymentRoutes from "./routes/payment.routes";
 import settingsRoutes from "./routes/settings.routes";
 import proposalRoutes from "./routes/proposal.routes";
 import contractRoutes from "./routes/contract.routes";
-import { startScheduler } from "./lib/scheduler";
+import { startScheduler, failInterruptedCampaigns } from "./lib/scheduler";
+import { checkReadiness, registerProcessHandlers } from "./lib/shutdown";
+
+initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ─── Trust Proxy (Required for reverse proxies like Render/Vercel/Nginx) ──
-app.set("trust proxy", 1);
+// ─── Trust Proxy ──────────────────────────────────────────────────
+// See lib/trustProxy.ts — unset TRUST_PROXY trusts no proxy, so clients can't spoof req.ip
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
+
+// ─── Request logging (first, so every response — even a CORS or rate-limit rejection — has a request id) ──
+app.use(httpLogger());
+app.use(metricsMiddleware());
 
 // ─── Security ────────────────────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+// A JSON API: no CSP needed; HSTS for two years, never framed
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+    hsts: { maxAge: 63072000, includeSubDomains: true },
+    frameguard: { action: "deny" },
+  })
+);
+
+// Sessions, settings and capability-link responses must never be cached by browsers or proxies
+const NO_STORE = /^\/v1\/(auth|settings|admin|proposals|contracts|tracker|payments\/invoice|task-requests\/track|newsletter\/(confirm|unsubscribe))(\/|$)/;
+app.use((req, res, next) => {
+  if (NO_STORE.test(req.path)) res.setHeader("Cache-Control", "no-store");
+  next();
+});
 
 // ─── CORS ────────────────────────────────────────────────────────
-const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173",
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
-
+// FRONTEND_URL + CORS_ORIGINS; localhost dev servers only outside production (lib/cors.ts).
+// A disallowed browser origin gets a 403 before any handler runs.
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS: origin ${origin} not allowed`));
+      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
+      callback(new AppError(`CORS: origin ${origin} not allowed`, 403, "CORS"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["X-Total-Count", "X-Request-Id"],
     credentials: true,
   })
 );
 
 // ─── Rate Limiting ───────────────────────────────────────────────
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_MAX", "500")),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many requests, please try again later." },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 5, // 5 login attempts per 15 min per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many login attempts. Please try again in 15 minutes." },
-  skip: (req) => !req.path.endsWith("/login") || req.method !== "POST",
-});
-
-const formLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_CONTACT", "5")),
-  message: { error: "Too many submissions. Please try again in an hour." },
-  skip: (req) => req.method !== "POST",
-});
-
-const chatLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_CHAT", "10")),
-  message: { error: "Chat rate limit exceeded. Please wait a moment." },
-});
-
+// See middleware/rateLimiters.ts (auth, form and chat limits are mounted per route)
 app.use(globalLimiter);
 
 // ─── Maintenance Mode ────────────────────────────────────────────
 const MAINTENANCE_BYPASS_PREFIXES = [
+  "/ready",
+  "/metrics",
   "/health",
   "/v1/auth",
   "/v1/admin",
@@ -134,7 +135,8 @@ app.use((req, res, next) => {
 // ─── Stripe Webhook Raw Body (MUST be before express.json) ──────
 // Only the webhook path gets raw Buffer — everything else gets JSON
 app.use((req, res, next) => {
-  if (req.originalUrl === "/v1/payments/webhook") {
+  // req.path ignores any query string Stripe may be configured with
+  if (req.path === "/v1/payments/webhook") {
     express.raw({ type: "application/json" })(req, res, next);
   } else {
     next();
@@ -149,14 +151,22 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Strips keys containing $ or . from req.body, req.params, req.query
 app.use(mongoSanitize({ replaceWith: "_" }));
 
-// ─── Logging ─────────────────────────────────────────────────────
-if (process.env.NODE_ENV !== "test") {
-  app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-}
-
 // ─── Health Check ─────────────────────────────────────────────────
+// Liveness: the process is up. Readiness: it can serve traffic (DB reachable, not draining).
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
+  res.json({ status: "ok" });
+});
+
+// Prometheus scrape endpoint (404 unless METRICS_TOKEN is set)
+app.get("/metrics", metricsHandler());
+
+app.get("/ready", async (_req, res) => {
+  const result = await checkReadiness();
+  if (result.ready) {
+    res.json({ status: "ready" });
+  } else {
+    res.status(503).json({ status: "not_ready", reason: result.reason });
+  }
 });
 
 // ─── API Routes ──────────────────────────────────────────────────
@@ -165,18 +175,28 @@ const V1 = "/v1";
 // (webhook raw body is handled above before express.json)
 
 import trackerRoutes from "./routes/tracker.routes";
+import sitemapRoutes from "./routes/sitemap.routes";
+
+// Audit trail for routers whose handlers don't call logAudit themselves (lib/audit.ts)
+const auditCaseStudies = auditWrites("case_study");
+const auditTestimonials = auditWrites("testimonial");
+const auditCms = auditWrites("cms", { withBody: true });
+const auditMedia = auditWrites("media", { action: (req) => (req.method === "POST" ? "upload" : req.method === "DELETE" ? "delete" : undefined) });
+// Tracker: admin actions only (client token routes have no user); chat messages aren't audited
+const auditTracker = auditWrites("tracker", { action: (req) => (req.path.endsWith("/chat") || req.method === "GET" ? undefined : "update") });
 
 app.use(`${V1}/auth`, authLimiter, authRoutes);
 app.use(`${V1}/portfolio`, portfolioRoutes);
-app.use(`${V1}/case-studies`, caseStudyRoutes);
-app.use(`${V1}/testimonials`, testimonialRoutes);
-app.use(`${V1}/task-requests`, formLimiter, taskRequestRoutes);
-app.use(`${V1}/contact`, formLimiter, contactRoutes);
-app.use(`${V1}/newsletter`, formLimiter, newsletterRoutes);
+app.use(`${V1}/case-studies`, auditCaseStudies, caseStudyRoutes);
+app.use(`${V1}/testimonials`, auditTestimonials, testimonialRoutes);
+app.use(`${V1}/task-requests`, taskRequestRoutes);
+app.use(`${V1}/contact`, contactRoutes);
+app.use(`${V1}/newsletter`, newsletterRoutes);
 app.use(`${V1}/chat`, chatLimiter, chatRoutes);
-app.use(`${V1}/cms`, cmsRoutes);
+app.use(`${V1}/cms`, auditCms, cmsRoutes);
 app.use(`${V1}/departments`, departmentRoutes);
-app.use(`${V1}/upload`, uploadRoutes);
+app.use(`${V1}/upload`, auditMedia, uploadRoutes);
+app.use(`${V1}/admin/users`, adminUserRoutes);
 app.use(`${V1}/admin`, adminRoutes);
 app.use(`${V1}/team`, teamRoutes);
 app.use(`${V1}/clients`, clientRoutes);
@@ -188,7 +208,8 @@ app.use(`${V1}/payments`, paymentRoutes);
 app.use(`${V1}/settings`, settingsRoutes);
 app.use(`${V1}/proposals`, proposalRoutes);
 app.use(`${V1}/contracts`, contractRoutes);
-app.use(`${V1}/tracker`, trackerRoutes);
+app.use(`${V1}/tracker`, auditTracker, trackerRoutes);
+app.use(`${V1}`, sitemapRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -200,20 +221,21 @@ app.use(errorHandler);
 
 // ─── Start ────────────────────────────────────────────────────────
 async function start() {
+  validateEnv();
   await connectDB();
   // Load all settings into process.env before any route runs
   await loadSettingsFromDB();
   startScheduler();
-  app.listen(PORT, () => {
-    console.log(`\n🚀 SunTriX API running on http://localhost:${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/health`);
-    console.log(`   Env:    ${process.env.NODE_ENV}\n`);
+  failInterruptedCampaigns().catch((err) => logger.error({ err }, "Could not check for interrupted campaigns"));
+  const server = app.listen(PORT, () => {
+    logger.info({ port: PORT, env: process.env.NODE_ENV }, `SunTriX API listening on :${PORT}`);
   });
+  registerProcessHandlers(server);
 }
 
 if (process.env.NODE_ENV !== "test") {
   start().catch((err) => {
-    console.error("Fatal startup error:", err);
+    logger.fatal({ err }, "Fatal startup error");
     process.exit(1);
   });
 }

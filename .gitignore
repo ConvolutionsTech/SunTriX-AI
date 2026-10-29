@@ -27,3 +27,19 @@ dist-ssr
 backend/.env
 backend/dist/
 .vercel
+
+# Environment files (examples are committed)
+.env
+.env.*
+!.env.example
+backend/.env.*
+!backend/.env.example
+
+# Tool leftovers — npm is the only package manager
+*.timestamp-*.mjs
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-lock.yaml
+brain/
+.lovable/

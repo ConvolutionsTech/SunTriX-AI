@@ -64,7 +64,6 @@ const PostSchema = new Schema<IPost>(
   { timestamps: true }
 );
 
-PostSchema.index({ slug: 1 }, { unique: true });
 PostSchema.index({ status: 1, publishedAt: -1 });
 PostSchema.index({ tags: 1 });
 PostSchema.index({ category: 1 });

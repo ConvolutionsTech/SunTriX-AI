@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Upload, X, Loader2, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
-import { ENDPOINTS } from "@/lib/api";
+import { ENDPOINTS, apiUpload } from "@/lib/api";
 
 interface ImageUploadProps {
   value: string;
@@ -24,25 +24,13 @@ export function ImageUpload({ value, onChange, className = "", placeholder = "ht
     formData.append("folder", "suntrix");
 
     try {
-      const token = localStorage.getItem("auth_token");
-      const res = await fetch(ENDPOINTS.UPLOAD_IMAGE, {
-        method: "POST",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const data = await res.json();
-      onChange(data.url || data.secureUrl);
+      const { data, error } = await apiUpload<{ url?: string; secureUrl?: string }>(ENDPOINTS.UPLOAD_IMAGE, formData);
+      if (error || !data) throw new Error(error || "Upload failed");
+      onChange(data.url || data.secureUrl || "");
       setMode("url");
     } catch (err) {
       console.error(err);
-      alert("Failed to upload image. Please try again.");
+      alert(`Failed to upload image: ${err instanceof Error ? err.message : "please try again"}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

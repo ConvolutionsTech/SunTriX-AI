@@ -7,10 +7,11 @@ import Layout from "../components/Layout";
 
 type TaskStatus = "new" | "in_review" | "proposal_sent" | "contract_sent" | "contract_signed" | "in_progress" | "completed" | "cancelled";
 
-interface StatusHistory {
+// GET /task-requests/track/:token returns a client-safe timeline (internal notes are stripped)
+interface StatusTimelineEntry {
   status: TaskStatus;
-  note: string;
   updatedAt: string;
+  note?: string;
 }
 
 interface TrackedTask {
@@ -18,7 +19,7 @@ interface TrackedTask {
   projectTitle: string;
   service: string;
   status: TaskStatus;
-  statusHistory: StatusHistory[];
+  statusTimeline: StatusTimelineEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -266,11 +267,11 @@ const TrackRequest = () => {
               </div>
 
               {/* Timeline History */}
-              {task.statusHistory && task.statusHistory.length > 0 && (
+              {task.statusTimeline && task.statusTimeline.length > 0 && (
                 <div className="bg-card border border-border rounded-2xl p-8">
                   <h3 className="text-lg font-bold text-foreground mb-6">Updates</h3>
                   <div className="space-y-6 border-l-2 border-border ml-2 pl-6">
-                    {task.statusHistory.map((h, i) => {
+                    {task.statusTimeline.map((h, i) => {
                       const stepInfo = statusSteps.find(s => s.value === h.status) || { label: "Status Updated", desc: "" };
                       return (
                         <div key={i} className="relative">

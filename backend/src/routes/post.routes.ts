@@ -1,10 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Post from "../models/Post";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems, bulkUpdate } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
 import sanitizeHtml from "sanitize-html";
+import { pageParams } from "../middleware/pagination";
 
 const sanitizeOptions = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat([
@@ -22,18 +24,19 @@ const sanitizeOptions = {
 const router = Router();
 
 // GET /posts — public: published posts with filters
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { tag, category, featured, limit = 20, skip = 0, all } = req.query;
-    const filter: Record<string, unknown> = all === "true" ? {} : { status: "published" };
+    const { tag, category, featured, all } = req.query;
+    const { limit, skip } = pageParams(req, { defaultLimit: 20, maxLimit: 100 });
+    const filter: Record<string, unknown> = req.user && all === "true" ? {} : { status: "published" };
     if (tag) filter.tags = tag;
     if (category) filter.category = category;
     if (featured === "true") filter.featured = true;
 
     const posts = await Post.find(filter)
       .sort({ publishedAt: -1, createdAt: -1 })
-      .limit(Number(limit))
-      .skip(Number(skip))
+      .limit(limit)
+      .skip(skip)
       .select("-content"); // Exclude full content in list view
 
     const total = await Post.countDocuments(filter);
@@ -64,7 +67,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 });
 
 // POST /posts — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = { ...req.body };
     if (!data.slug && data.title) {
@@ -82,8 +85,31 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
   } catch (err) { next(err); }
 });
 
+// DELETE /posts/bulk — bulk delete
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids }: { ids: string[] } = req.body;
+    if (!ids?.length) return next(createError("IDs required", 400));
+    await Post.deleteMany({ _id: { $in: ids } });
+    await logAudit(req, "bulk_delete", "post", "", `${ids.length} posts`);
+    res.json({ message: `Deleted ${ids.length} posts` });
+  } catch (err) { next(err); }
+});
+
+// PUT /posts/bulk — bulk status update
+router.put("/bulk", requireAuth, bulkUpdate(["status", "featured", "category"]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
+    if (!ids?.length) return next(createError("IDs required", 400));
+    if (update.status === "published") update.publishedAt = new Date();
+    await Post.updateMany({ _id: { $in: ids } }, update, { runValidators: true });
+    await logAudit(req, "bulk_update", "post", "", `${ids.length} posts`);
+    res.json({ message: `Updated ${ids.length} posts` });
+  } catch (err) { next(err); }
+});
+
 // PUT /posts/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = { ...req.body };
     if (data.status === "published" && !data.publishedAt) {
@@ -92,7 +118,7 @@ router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
     if (data.content) {
       data.content = sanitizeHtml(data.content, sanitizeOptions);
     }
-    const post = await Post.findByIdAndUpdate(req.params.id, data, { new: true });
+    const post = await Post.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!post) return next(createError("Post not found", 404));
     await logAudit(req, "update", "post", post._id.toString(), post.title);
     res.json(post);
@@ -109,31 +135,10 @@ router.delete("/:id", requireAuth, async (req: Request, res: Response, next: Nex
   } catch (err) { next(err); }
 });
 
-// DELETE /posts/bulk — bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { ids }: { ids: string[] } = req.body;
-    if (!ids?.length) return next(createError("IDs required", 400));
-    await Post.deleteMany({ _id: { $in: ids } });
-    await logAudit(req, "bulk_delete", "post", "", `${ids.length} posts`);
-    res.json({ message: `Deleted ${ids.length} posts` });
-  } catch (err) { next(err); }
-});
 
-// PUT /posts/bulk — bulk status update
-router.put("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
-    if (!ids?.length) return next(createError("IDs required", 400));
-    if (update.status === "published") update.publishedAt = new Date();
-    await Post.updateMany({ _id: { $in: ids } }, update);
-    await logAudit(req, "bulk_update", "post", "", `${ids.length} posts`);
-    res.json({ message: `Updated ${ids.length} posts` });
-  } catch (err) { next(err); }
-});
 
 // POST /posts/bulk/import — bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));

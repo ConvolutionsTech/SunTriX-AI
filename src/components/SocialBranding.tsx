@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ExternalLink } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { SocialIconSVG, PLATFORM_BRAND } from "@/components/SocialIcons";
+import { safeHref } from "@/lib/sanitize";
 
 interface SocialLink {
   platform: string;
@@ -45,7 +46,7 @@ const SocialBranding = () => {
             return (
               <motion.a
                 key={link.platform}
-                href={link.url}
+                href={safeHref(link.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 initial={{ opacity: 0, y: 10 }}

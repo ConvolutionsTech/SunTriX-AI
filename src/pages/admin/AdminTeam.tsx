@@ -10,6 +10,7 @@ import { SortControl, SortOption } from "@/components/admin/SortControl";
 import { toast } from "sonner";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { safeHref } from "@/lib/sanitize";
 
 interface TeamMember {
   _id: string;
@@ -256,10 +257,10 @@ const AdminTeam = () => {
                   {/* Social Links & Actions */}
                   <div className="flex items-center justify-between w-full mt-auto pt-4 border-t border-border/50">
                     <div className="flex gap-1.5">
-                      {member.linkedin && <a href={member.linkedin} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Linkedin className="h-4 w-4" /></a>}
-                      {member.twitter && <a href={member.twitter} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Twitter className="h-4 w-4" /></a>}
-                      {member.github && <a href={member.github} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Github className="h-4 w-4" /></a>}
-                      {member.website && <a href={member.website} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Globe className="h-4 w-4" /></a>}
+                      {member.linkedin && <a href={safeHref(member.linkedin)} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Linkedin className="h-4 w-4" /></a>}
+                      {member.twitter && <a href={safeHref(member.twitter)} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Twitter className="h-4 w-4" /></a>}
+                      {member.github && <a href={safeHref(member.github)} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Github className="h-4 w-4" /></a>}
+                      {member.website && <a href={safeHref(member.website)} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Globe className="h-4 w-4" /></a>}
                     </div>
 
                     <div className="flex items-center gap-1 bg-background rounded-full border border-border/50 p-1">

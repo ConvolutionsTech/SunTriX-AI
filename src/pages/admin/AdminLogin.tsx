@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Lock, Mail } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { authManager, useAuth } from "@/lib/auth";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
@@ -10,7 +11,9 @@ const AdminLogin = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isAuthenticated = !!localStorage.getItem("auth_token");
+  const navigate = useNavigate();
+  const notice = (useLocation().state as { notice?: string } | null)?.notice;
+  const { isAuthenticated } = useAuth();
   if (isAuthenticated) {
     return <Navigate to="/admin" replace />;
   }
@@ -25,10 +28,8 @@ const AdminLogin = () => {
     );
     setLoading(false);
     if (data?.token && data?.refreshToken) {
-      localStorage.setItem("auth_token", data.token);
-      localStorage.setItem("refresh_token", data.refreshToken);
-      localStorage.setItem("suntrix_admin_session", JSON.stringify(data.user));
-      window.location.href = "/admin";
+      authManager.login(data.token, data.refreshToken, data.user);
+      navigate("/admin", { replace: true });
     } else {
       setError(apiErr || "Invalid email or password");
     }
@@ -52,6 +53,9 @@ const AdminLogin = () => {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
+            {notice && !error && (
+              <div role="status" className="rounded-lg bg-primary/10 border border-primary/20 px-4 py-3 text-sm text-foreground">{notice}</div>
+            )}
             {error && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
                 {error}
@@ -88,6 +92,9 @@ const AdminLogin = () => {
             <button type="submit" disabled={loading} className="w-full gradient-bg rounded-lg py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-60">
               {loading ? "Signing in…" : "Sign In"}
             </button>
+            <p className="text-center text-sm">
+              <Link to="/admin/forgot-password" className="text-primary hover:underline">Forgot password?</Link>
+            </p>
           </form>
         </div>
       </motion.div>

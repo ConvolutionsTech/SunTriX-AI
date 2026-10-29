@@ -1,14 +1,14 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Admin and client capability links (proposal, contract, invoice, tracker) are private
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /proposal/
+Disallow: /contract/
+Disallow: /invoice/
+Disallow: /track/
+Disallow: /client/
+Disallow: /payment/
+
+# Sitemap: the API serves it at GET /v1/sitemap.xml. Once vercel.json rewrites
+# /sitemap.xml to that URL (needs the production API domain), add:
+# Sitemap: https://www.suntrix.ai/sitemap.xml

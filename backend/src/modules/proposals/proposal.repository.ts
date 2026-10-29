@@ -13,12 +13,30 @@ export class ProposalRepository {
     return Proposal.findById(id);
   }
 
+  /** Marks the request's other open proposals as superseded so only the latest can be accepted. */
+  async supersedeOthers(taskRequestId: string, keepId: string): Promise<void> {
+    await Proposal.updateMany(
+      { taskRequestId, _id: { $ne: keepId }, status: { $in: ["draft", "sent", "changes_requested", "expired"] } },
+      { $set: { status: "rejected" } }
+    );
+  }
+
+  async findByTask(taskRequestId: string): Promise<IProposal[]> {
+    return Proposal.find({ taskRequestId }).sort({ createdAt: -1 });
+  }
+
+  /** Moves an open, unexpired proposal to "processing"; returns it as it was before (null if not claimable). */
   async atomicClaimForAcceptance(token: string): Promise<IProposal | null> {
     return Proposal.findOneAndUpdate(
-      { proposalToken: token, status: { $in: ["sent", "changes_requested"] } },
+      { proposalToken: token, status: { $in: ["sent", "changes_requested"] }, expiresAt: { $gt: new Date() } },
       { $set: { status: "processing" } },
-      { new: true }
-    ).populate("taskRequestId", "projectTitle service name email selectedPlan techStack contractToken");
+      { new: false }
+    ).populate("taskRequestId", "projectTitle service name email selectedPlan techStack contractToken status");
+  }
+
+  /** Atomic status change that only applies when the proposal is in one of `from`. */
+  async transition(filter: Record<string, unknown>, from: ProposalStatus[], set: Record<string, unknown>): Promise<IProposal | null> {
+    return Proposal.findOneAndUpdate({ ...filter, status: { $in: from } }, { $set: set }, { new: true });
   }
 
   async updateStatus(id: string, status: ProposalStatus, extra: Record<string, any> = {}): Promise<IProposal | null> {

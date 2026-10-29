@@ -1,5 +1,5 @@
 import TaskRequest, { TaskRequestStatus, ITaskRequest } from "../models/TaskRequest";
-import { createError } from "../middleware/errorHandler";
+import { AppError, ERROR_CODES } from "../shared/errors/appError";
 
 export type ActorRole = "admin" | "system" | "client";
 
@@ -34,7 +34,7 @@ const ACTOR_ALLOWED_TRANSITIONS: Record<ActorRole, Record<TaskRequestStatus, Tas
     proposal_sent: ["in_review", "contract_sent"],
     contract_sent: ["contract_signed"],
     contract_signed: [],
-    in_progress: [],
+    in_progress: ["completed"], // client approves final sign-off
     completed: [],
     cancelled: [],
   },
@@ -61,7 +61,10 @@ export class TaskStatusMachine {
   }
 
   /**
-   * Execute single authoritative status transition on a TaskRequest document.
+   * The single authoritative status transition. The write is conditional on the
+   * status that was validated, so a concurrent change (e.g. an admin cancel while
+   * a payment webhook moves the task on) fails with 409 instead of overwriting.
+   * Moving to the current status is a no-op.
    */
   static async transition(
     taskId: string | ITaskRequest["_id"],
@@ -69,31 +72,27 @@ export class TaskStatusMachine {
     actorRole: ActorRole = "system",
     note: string = ""
   ): Promise<ITaskRequest> {
-    const task = await TaskRequest.findById(taskId);
-    if (!task) {
-      throw createError("Task request not found", 404);
-    }
+    const task = await TaskRequest.findOne({ _id: taskId, deletedAt: null });
+    if (!task) throw new AppError("Task request not found", ERROR_CODES.NOT_FOUND);
 
     const currentStatus = task.status as TaskRequestStatus;
-    if (currentStatus === newStatus) {
-      return task;
-    }
+    if (currentStatus === newStatus) return task;
 
     if (!this.isValidTransition(currentStatus, newStatus, actorRole)) {
-      throw createError(
-        `Invalid status transition from '${currentStatus}' to '${newStatus}' by ${actorRole}.`,
-        400
-      );
+      throw new AppError(`Invalid status transition from '${currentStatus}' to '${newStatus}' by ${actorRole}.`, ERROR_CODES.BAD_REQUEST);
     }
 
-    task.status = newStatus;
-    task.statusHistory.push({
-      status: newStatus,
-      note: note || `Status transitioned to ${newStatus} by ${actorRole}`,
-      updatedAt: new Date(),
-    });
-
-    await task.save();
-    return task;
+    const updated = await TaskRequest.findOneAndUpdate(
+      { _id: taskId, deletedAt: null, status: currentStatus },
+      {
+        $set: { status: newStatus },
+        $push: { statusHistory: { status: newStatus, note: note || `Status transitioned to ${newStatus} by ${actorRole}`, updatedAt: new Date() } },
+      },
+      { new: true }
+    );
+    if (!updated) {
+      throw new AppError("This request was just changed by someone else — reload and try again.", ERROR_CODES.CONFLICT);
+    }
+    return updated;
   }
 }

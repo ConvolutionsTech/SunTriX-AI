@@ -3,9 +3,24 @@ import { upload, uploadImage, uploadVideo, uploadDocument, cloudinary, deleteAss
 import MediaAsset from "../models/MediaAsset";
 import { requireAuth } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { pageParams, setTotal } from "../middleware/pagination";
+import { getSetting } from "../lib/configLoader";
 import path from "path";
 
 const router = Router();
+
+const libraryRoot = () => getSetting("UPLOAD_DEFAULT_FOLDER", "suntrix");
+const SUBFOLDERS = new Set(["", "videos", "docs", "blog", "portfolio", "team", "clients", "images"]);
+
+/** Uploads go to the library root or one of its known subfolders; anything else is refused. */
+function uploadFolder(requested: unknown, fallbackSub: string): string {
+  const root = libraryRoot();
+  if (requested === undefined || requested === "") return fallbackSub ? `${root}/${fallbackSub}` : root;
+  const value = String(requested);
+  const sub = value === root ? "" : value.startsWith(`${root}/`) ? value.slice(root.length + 1) : null;
+  if (sub === null || !SUBFOLDERS.has(sub)) throw createError(`folder must be ${root} or one of its subfolders`, 400);
+  return value;
+}
 
 function isImageFile(file: Express.Multer.File): boolean {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -23,107 +38,36 @@ function isVideoFile(file: Express.Multer.File): boolean {
   );
 }
 
-// GET /upload — list all assets from Cloudinary & DB (admin only)
-router.get("/", requireAuth, async (_req: Request, res: Response, _next: NextFunction) => {
+// GET /upload?type=image|video|raw&limit&skip — the public media library, from MongoDB
+// (client project files are not listed). Total in X-Total-Count.
+router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    applyConfig();
-    const result = await cloudinary.api.resources({
-      type: "upload",
-      prefix: "suntrix",
-      max_results: 200,
-      resource_type: "image",
-    }).catch(() => ({ resources: [] }));
-
-    const imageAssets = result.resources.map((r: Record<string, unknown>) => ({
-      _id: (r.asset_id as string) || (r.public_id as string),
-      publicId: r.public_id as string,
-      url: r.url as string,
-      secureUrl: r.secure_url as string,
-      resourceType: "image",
-      format: r.format as string,
-      width: r.width as number,
-      height: r.height as number,
-      bytes: r.bytes as number,
-      folder: (r.folder as string) || "suntrix",
-      createdAt: r.created_at as string,
-    }));
-
-    // Fetch videos
-    const videoResult = await cloudinary.api
-      .resources({
-        type: "upload",
-        prefix: "suntrix",
-        max_results: 100,
-        resource_type: "video",
-      })
-      .catch(() => ({ resources: [] }));
-
-    const videoAssets = videoResult.resources.map((r: Record<string, unknown>) => ({
-      _id: (r.asset_id as string) || (r.public_id as string),
-      publicId: r.public_id as string,
-      url: r.url as string,
-      secureUrl: r.secure_url as string,
-      resourceType: "video",
-      format: r.format as string,
-      width: r.width as number,
-      height: r.height as number,
-      bytes: r.bytes as number,
-      folder: (r.folder as string) || "suntrix",
-      createdAt: r.created_at as string,
-    }));
-
-    // Fetch raw documents/files (including .md, .pdf, .zip, etc.)
-    const rawResult = await cloudinary.api
-      .resources({
-        type: "upload",
-        prefix: "suntrix",
-        max_results: 100,
-        resource_type: "raw",
-      })
-      .catch(() => ({ resources: [] }));
-
-    const rawAssets = rawResult.resources.map((r: Record<string, unknown>) => ({
-      _id: (r.asset_id as string) || (r.public_id as string),
-      publicId: r.public_id as string,
-      url: r.url as string,
-      secureUrl: r.secure_url as string,
-      resourceType: "raw",
-      format: (r.format as string) || path.extname(r.public_id as string).replace(".", ""),
-      bytes: r.bytes as number,
-      folder: (r.folder as string) || "suntrix",
-      createdAt: r.created_at as string,
-    }));
-
-    // Deduplicate existing Cloudinary assets by hash/filename
-    const uniqueAssets = new Map<string, any>();
-    [...imageAssets, ...videoAssets, ...rawAssets].forEach((asset: any) => {
-      const parts = asset.publicId.split("/");
-      const hashOrName = parts[parts.length - 1];
-      if (!uniqueAssets.has(hashOrName)) {
-        uniqueAssets.set(hashOrName, asset);
-      }
-    });
-
-    res.json(Array.from(uniqueAssets.values()));
-  } catch (err: any) {
-    // Fallback to MongoDB MediaAssets if Cloudinary call fails
-    try {
-      const dbAssets = await MediaAsset.find({}).sort({ createdAt: -1 }).lean();
-      return res.json(
-        dbAssets.map((a: any) => ({
-          _id: a._id.toString(),
-          publicId: a.publicId || a._id.toString(),
-          url: a.url,
-          secureUrl: a.url,
-          resourceType: a.resourceType || "raw",
-          bytes: a.bytes || 0,
-          folder: a.folder || "suntrix",
-          createdAt: a.createdAt,
-        }))
-      );
-    } catch {
-      return res.json([]);
-    }
+    const filter: Record<string, unknown> = { scope: { $in: ["public", null] } };
+    if (typeof req.query.type === "string" && ["image", "video", "raw"].includes(req.query.type)) filter.resourceType = req.query.type;
+    const { limit, skip } = pageParams(req, { defaultLimit: 500, maxLimit: 1000 });
+    const [assets, total] = await Promise.all([
+      MediaAsset.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      MediaAsset.countDocuments(filter),
+    ]);
+    setTotal(res, total);
+    res.json(
+      assets.map((a) => ({
+        _id: String(a._id),
+        publicId: a.publicId,
+        url: a.url,
+        secureUrl: a.url,
+        resourceType: a.resourceType,
+        format: a.format,
+        width: a.width,
+        height: a.height,
+        bytes: a.bytes,
+        folder: a.folder,
+        name: a.originalName || undefined,
+        createdAt: a.createdAt,
+      }))
+    );
+  } catch (err) {
+    next(err);
   }
 });
 
@@ -135,11 +79,11 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) return next(createError("No file uploaded", 400));
-      const folder = (req.body.folder as string) || "suntrix";
+      const folder = uploadFolder(req.body.folder, "");
 
       // If user uploaded a video, auto-forward to uploadVideo
       if (isVideoFile(req.file)) {
-        const videoResult = await uploadVideo(req.file.buffer, folder || "suntrix/videos");
+        const videoResult = await uploadVideo(req.file.buffer, folder);
         return res.json({
           _id: videoResult.publicId,
           publicId: videoResult.publicId,
@@ -148,14 +92,14 @@ router.post(
           resourceType: "video",
           format: path.extname(req.file.originalname).replace(".", "") || "mp4",
           bytes: req.file.size,
-          folder: folder || "suntrix/videos",
+          folder: folder,
           createdAt: new Date().toISOString(),
         });
       }
 
       // If non-image document file (e.g. .md, .pdf, .zip, .docx), auto-forward to uploadDocument
       if (!isImageFile(req.file)) {
-        const docResult = await uploadDocument(req.file.buffer, req.file.originalname, folder || "suntrix/docs");
+        const docResult = await uploadDocument(req.file.buffer, req.file.originalname, folder);
         return res.json({
           _id: docResult.publicId,
           publicId: docResult.publicId,
@@ -165,7 +109,7 @@ router.post(
           format: path.extname(req.file.originalname).replace(".", ""),
           name: req.file.originalname,
           bytes: req.file.size,
-          folder: folder || "suntrix/docs",
+          folder: folder,
           createdAt: new Date().toISOString(),
         });
       }
@@ -196,10 +140,10 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) return next(createError("No file uploaded", 400));
-      const folder = (req.body.folder as string) || "suntrix/videos";
+      const folder = uploadFolder(req.body.folder, "videos");
 
       if (isImageFile(req.file)) {
-        const imgResult = await uploadImage(req.file.buffer, folder || "suntrix");
+        const imgResult = await uploadImage(req.file.buffer, folder);
         return res.json({
           _id: imgResult.publicId,
           publicId: imgResult.publicId,
@@ -214,7 +158,7 @@ router.post(
       }
 
       if (!isVideoFile(req.file)) {
-        const docResult = await uploadDocument(req.file.buffer, req.file.originalname, folder || "suntrix/docs");
+        const docResult = await uploadDocument(req.file.buffer, req.file.originalname, folder);
         return res.json({
           _id: docResult.publicId,
           publicId: docResult.publicId,
@@ -255,7 +199,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) return next(createError("No file uploaded", 400));
-      const folder = (req.body.folder as string) || "suntrix/docs";
+      const folder = uploadFolder(req.body.folder, "docs");
       const result = await uploadDocument(req.file.buffer, req.file.originalname, folder);
       const ext = path.extname(req.file.originalname).toLowerCase();
       res.json({
@@ -276,29 +220,52 @@ router.post(
   }
 );
 
-// DELETE /upload/bulk — bulk delete from Cloudinary (admin only)
+/** Only files in the public media library can be deleted here (never client project files). */
+async function deletableAssets(ids: string[]): Promise<{ publicId: string; resourceType: "image" | "video" | "raw" }[]> {
+  const root = `${libraryRoot()}/`;
+  const out: { publicId: string; resourceType: "image" | "video" | "raw" }[] = [];
+  for (const publicId of ids) {
+    if (typeof publicId !== "string" || !publicId.startsWith(root)) throw createError(`Only files in ${root} can be deleted here`, 400);
+    const asset = await MediaAsset.findOne({ publicId }).select("resourceType scope").lean();
+    if (asset?.scope && asset.scope !== "public") throw createError("Client project files can't be deleted from the media library", 400);
+    out.push({ publicId, resourceType: asset?.resourceType ?? "image" });
+  }
+  return out;
+}
+
+// DELETE /upload/bulk { publicIds } — Cloudinary deletes are per resource type
 router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { publicIds } = req.body;
-    if (!Array.isArray(publicIds)) return next(createError("publicIds array required", 400));
-
-    if (publicIds.length > 0) {
-      await cloudinary.api.delete_resources(publicIds);
-      await MediaAsset.deleteMany({ publicId: { $in: publicIds } });
+    if (!Array.isArray(publicIds) || publicIds.length > 100) return next(createError("publicIds must be an array of at most 100 ids", 400));
+    const assets = await deletableAssets(publicIds);
+    applyConfig();
+    for (const type of ["image", "video", "raw"] as const) {
+      const ids = assets.filter((a) => a.resourceType === type).map((a) => a.publicId);
+      if (ids.length) await cloudinary.api.delete_resources(ids, { resource_type: type });
     }
-
-    res.json({ success: true, count: publicIds.length });
+    await MediaAsset.deleteMany({ publicId: { $in: assets.map((a) => a.publicId) } });
+    res.json({ success: true, count: assets.length });
   } catch (err) {
     next(err);
   }
 });
 
-// DELETE /upload/:publicId — delete asset from Cloudinary (admin only)
-router.delete("/:publicId", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+/** `:id` is the MediaAsset _id; base64 / base64url public ids are still accepted from older clients. */
+async function resolvePublicId(id: string): Promise<string> {
+  if (/^[a-f\d]{24}$/i.test(id)) {
+    const asset = await MediaAsset.findById(id).select("publicId").lean();
+    if (!asset) throw createError("Asset not found", 404);
+    return asset.publicId;
+  }
+  return Buffer.from(id.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+}
+
+// DELETE /upload/:id
+router.delete("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const publicId = Buffer.from(req.params.publicId, "base64").toString("utf-8");
-    await deleteAsset(publicId);
-    await MediaAsset.deleteOne({ publicId });
+    const [asset] = await deletableAssets([await resolvePublicId(req.params.id)]);
+    await deleteAsset(asset.publicId, asset.resourceType);
     res.json({ success: true, message: "Asset deleted" });
   } catch (err) {
     next(err);

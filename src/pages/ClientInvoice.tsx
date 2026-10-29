@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 interface InvoiceData {
   _id: string;
@@ -23,9 +24,8 @@ interface InvoiceData {
   currency: string;
   status: string;
   type: string;
-  checkoutUrl?: string;
-  alreadyPaid?: boolean;
   expiresAt?: string;
+  receiptUrl?: string;
   trackingToken?: string;
   taskRequestId?: { projectTitle: string; service: string; name: string };
   createdAt: string;
@@ -38,7 +38,9 @@ const ClientInvoice = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
-  const [companyName, setCompanyName] = useState("SunTriX AI Solutions");
+  const [payError, setPayError] = useState<string | null>(null);
+  const canceled = useSearchParams()[0].get("canceled") === "true";
+  const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
     if (!token) {
@@ -49,16 +51,11 @@ const ClientInvoice = () => {
 
     const fetchInvoice = async () => {
       const { data, error: err } = await apiRequest<InvoiceData>(ENDPOINTS.PAYMENT_INVOICE(token));
-      if (err || !data) setError("Invoice not found or has expired.");
+      if (err || !data) setError(err || "Invoice not found.");
       else setInvoice(data);
     };
     
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data?.name) setCompanyName(data.data.name);
-    };
-
-    Promise.all([fetchInvoice(), fetchCompany()]).finally(() => setLoading(false));
+    fetchInvoice().finally(() => setLoading(false));
   }, [token]);
 
   const fmt = (cents: number, currency = "usd") =>
@@ -67,10 +64,18 @@ const ClientInvoice = () => {
       currency: currency.toUpperCase(),
     }).format(cents / 100);
 
-  const handlePay = () => {
-    if (!invoice?.checkoutUrl) return;
+  // Checkout is created on demand; an open Stripe session is reused by the API
+  const handlePay = async () => {
+    if (!token || redirecting) return;
     setRedirecting(true);
-    window.location.href = invoice.checkoutUrl;
+    setPayError(null);
+    const { data, error: err } = await apiRequest<{ checkoutUrl: string }>(ENDPOINTS.PAYMENT_INVOICE_CHECKOUT(token), { method: "POST" });
+    if (err || !data?.checkoutUrl) {
+      setPayError(err || "Could not start checkout. Please try again.");
+      setRedirecting(false);
+      return;
+    }
+    window.location.assign(data.checkoutUrl);
   };
 
   const daysUntilExpiry = (expiresAt: string) => {
@@ -102,6 +107,12 @@ const ClientInvoice = () => {
   if (!invoice) return null;
 
   const expiry = invoice.expiresAt ? daysUntilExpiry(invoice.expiresAt) : null;
+  const isPaid = invoice.status === "paid";
+  const isExpired = !isPaid && invoice.status === "pending" && expiry !== null && expiry <= 0;
+  const isPayable = invoice.status === "pending" && !isExpired;
+  const closedReason = isExpired
+    ? "This invoice has expired."
+    : ({ cancelled: "This invoice was cancelled.", refunded: "This invoice was refunded.", failed: "The payment for this invoice failed." } as Record<string, string>)[invoice.status];
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-16">
@@ -120,14 +131,19 @@ const ClientInvoice = () => {
               {companyName}
             </p>
             <h1 className="text-xl font-extrabold text-foreground">
-              {invoice.alreadyPaid ? "Paid Invoice" : "Invoice & Proposal"}
+              {isPaid ? "Paid Invoice" : "Invoice"}
             </h1>
           </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card shadow-xl overflow-hidden">
+          {canceled && isPayable && (
+            <div role="status" className="bg-muted/40 border-b border-border px-6 py-3 text-xs text-muted-foreground">
+              Checkout was cancelled — you haven't been charged. You can pay whenever you're ready.
+            </div>
+          )}
           {/* Status banner */}
-          {invoice.alreadyPaid ? (
+          {isPaid ? (
             <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-4 flex items-center gap-3">
               <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
               <div>
@@ -137,7 +153,7 @@ const ClientInvoice = () => {
                 </p>
               </div>
             </div>
-          ) : expiry !== null && expiry <= 7 ? (
+          ) : isPayable && expiry !== null && expiry <= 7 ? (
             <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-4 flex items-center gap-3">
               <Clock className="h-5 w-5 text-amber-500 shrink-0" />
               <div>
@@ -207,7 +223,7 @@ const ClientInvoice = () => {
             </div>
 
             {/* CTA */}
-            {invoice.alreadyPaid ? (
+            {isPaid ? (
               <div className="space-y-3">
                 {invoice.trackingToken && (
                   <button
@@ -224,8 +240,11 @@ const ClientInvoice = () => {
                   Back to Homepage
                 </Link>
               </div>
-            ) : invoice.checkoutUrl ? (
+            ) : isPayable ? (
               <div className="space-y-3">
+                {payError && (
+                  <p role="alert" className="text-xs text-destructive text-center">{payError}</p>
+                )}
                 <button
                   onClick={handlePay}
                   disabled={redirecting}
@@ -237,24 +256,24 @@ const ClientInvoice = () => {
                     </>
                   ) : (
                     <>
-                      <CreditCard className="h-4 w-4" /> Accept Proposal & Pay{" "}
-                      {fmt(invoice.amount, invoice.currency)}
+                      <CreditCard className="h-4 w-4" /> Pay {fmt(invoice.amount, invoice.currency)}
                     </>
                   )}
                 </button>
                 <p className="text-[10px] text-muted-foreground text-center leading-relaxed">
-                  By clicking, you accept this proposal and authorize the payment.
+                  You'll complete the payment securely on Stripe.
                 </p>
               </div>
             ) : (
-              <div className="rounded-xl bg-muted/30 p-4 text-center">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Preparing secure checkout…</p>
+              <div role="status" className="rounded-xl bg-muted/30 p-4 text-center space-y-2">
+                <AlertTriangle className="h-5 w-5 text-muted-foreground mx-auto" />
+                <p className="text-sm text-foreground font-medium">{closedReason || "This invoice can't be paid online."}</p>
+                <Link to="/contact" className="text-xs text-primary underline">Contact us about this invoice</Link>
               </div>
             )}
 
             {/* What happens after payment */}
-            {!invoice.alreadyPaid && (
+            {isPayable && (
               <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-2">
                 <p className="text-xs font-bold text-primary uppercase tracking-wider">
                   After payment

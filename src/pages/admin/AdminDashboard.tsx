@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
+import { EmailHealthPanel, type EmailHealth } from "@/components/admin/EmailHealthPanel";
+import { AiUsageCard } from "@/components/admin/AiUsageCard";
 import {
   AreaChart, Area, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from "recharts";
@@ -22,6 +24,7 @@ interface DashboardStats {
   publishedPortfolio: number;
   totalTestimonials: number;
   totalSubscribers: number;
+  email?: EmailHealth;
 }
 
 interface TrendPoint {
@@ -130,6 +133,9 @@ export const AdminDashboard = () => {
           </div>
         }
       />
+
+      {stats.email && <EmailHealthPanel health={stats.email} onChanged={loadData} />}
+      <AiUsageCard />
 
       {/* SECTION 1: ACTION REQUIRED QUEUE */}
       <div className="space-y-3">

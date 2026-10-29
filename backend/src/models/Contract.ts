@@ -8,6 +8,8 @@ export interface IContract extends Document {
   clientEmail: string;
   // AI-generated contract body (plain text with sections)
   projectTitle: string;
+  totalAmount: number;
+  currency: string;
   scopeSummary: string;
   deliverablesText: string;
   timelineText: string;
@@ -35,6 +37,8 @@ const ContractSchema = new Schema<IContract>(
     clientName:     { type: String, default: "" },
     clientEmail:    { type: String, required: true, lowercase: true, trim: true },
     projectTitle:   { type: String, default: "" },
+    totalAmount:    { type: Number, default: 0 },      // integer cents, copied from the accepted proposal
+    currency:       { type: String, default: "usd" },
     scopeSummary:   { type: String, default: "" },
     deliverablesText:  { type: String, default: "" },
     timelineText:      { type: String, default: "" },
@@ -58,6 +62,10 @@ const ContractSchema = new Schema<IContract>(
 );
 
 ContractSchema.index({ taskRequestId: 1 });
+// Exactly one contract per proposal, even under concurrent or repeated accepts
+ContractSchema.index({ proposalId: 1 }, { unique: true });
 ContractSchema.index({ clientEmail: 1 });
+
+ContractSchema.index({ status: 1, expiresAt: 1 }); // expiry job
 
 export default mongoose.model<IContract>("Contract", ContractSchema);

@@ -2,10 +2,12 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Mail } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { toast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useMedia } from "@/hooks/use-media";
 import { SocialIconSVG, PLATFORM_BRAND } from "@/components/SocialIcons";
+import { safeHref } from "@/lib/sanitize";
 
 const Footer = () => {
   const [name, setName] = useState("");
@@ -14,16 +16,12 @@ const Footer = () => {
   const { t } = useI18n();
   const suntrixLogo = useMedia("suntrix-logo");
   const [socialLinks, setSocialLinks] = useState<{platform: string, url: string, enabled: boolean}[]>([]);
-  const [companyInfo, setCompanyInfo] = useState<{ name?: string; tagline?: string }>({});
+  const companyInfo = useCompanyInfo();
 
   useEffect(() => {
     // Fetch social links
     apiRequest<{links: {platform: string, url: string, enabled: boolean}[]}>(ENDPOINTS.CMS_SOCIAL_LINKS).then(({ data }) => {
       if (data && data.links) setSocialLinks(data.links);
-    });
-    // Fetch company name + tagline for copyright and footer description
-    apiRequest<{ data: { name?: string; tagline?: string } }>(ENDPOINTS.CMS_COMPANY).then(({ data }) => {
-      if (data?.data) setCompanyInfo(data.data);
     });
   }, []);
 
@@ -50,9 +48,14 @@ const Footer = () => {
       });
       
       if (res.error) {
-        toast({ title: "Already subscribed", description: "This email is already on our list." });
+        toast({ title: "Couldn't subscribe", description: res.error, variant: "destructive" });
       } else {
-        toast({ title: "Subscribed!", description: "You've successfully joined our newsletter." });
+        const needsConfirmation = (res.data as { requiresConfirmation?: boolean } | null)?.requiresConfirmation;
+        toast(
+          needsConfirmation
+            ? { title: "Check your inbox", description: "Click the link we just sent to confirm your subscription." }
+            : { title: "Subscribed!", description: "You've successfully joined our newsletter." }
+        );
         setEmail("");
         setName("");
         setInterest("General News");
@@ -87,7 +90,7 @@ const Footer = () => {
                 const brand = PLATFORM_BRAND[link.platform];
                 const icon = SocialIconSVG[link.platform];
                 return (
-                  <a key={link.platform} href={link.url} target="_blank" rel="noopener noreferrer"
+                  <a key={link.platform} href={safeHref(link.url)} target="_blank" rel="noopener noreferrer"
                     title={link.platform}
                     className={`h-9 w-9 rounded-lg border border-border bg-muted/30 flex items-center justify-center transition-all ${brand?.bg || "hover:bg-primary/10"} ${brand?.border || "hover:border-primary/30"}`}
                     style={{ color: brand?.color }}
@@ -164,8 +167,9 @@ const Footer = () => {
               © {new Date().getFullYear()} {companyName}
             </p>
             <div className="flex items-center gap-6">
-              <Link to="/legal" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Privacy</Link>
-              <Link to="/legal" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Terms</Link>
+              <Link to="/legal/privacy" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Privacy</Link>
+              <Link to="/legal/terms" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Terms</Link>
+              <Link to="/legal/cookies" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Cookies</Link>
             </div>
           </div>
           

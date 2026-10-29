@@ -28,9 +28,9 @@ const ServicePageTemplate = ({ icon: Icon, title, subtitle, description, categor
   const [deptInfo, setDeptInfo] = useState<Department | null>(null);
 
   useEffect(() => {
-    apiRequest<PortfolioProject[]>(ENDPOINTS.PORTFOLIO).then(({ data }) => {
+    apiRequest<PortfolioProject[]>(ENDPOINTS.PORTFOLIO_LIST).then(({ data }) => {
       if (data) {
-        setRelatedProjects(data.filter((p) => p.status === "Published" && p.category === category).slice(0, 3));
+        setRelatedProjects(data.filter((p) => p.status === "published" && p.category === category).slice(0, 3));
       }
     });
 

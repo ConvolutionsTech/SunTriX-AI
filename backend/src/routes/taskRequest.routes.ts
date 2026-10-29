@@ -1,13 +1,17 @@
+import TaskRequest from "../models/TaskRequest";
 import { Router, Request, Response, NextFunction } from "express";
+import { writable } from "../middleware/bodyPolicy";
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate, TaskRequestSchema } from "../middleware/validate";
+import { formLimiter } from "../middleware/rateLimiters";
 import { logAudit } from "../lib/audit";
+import { pageParams } from "../middleware/pagination";
 
 const router = Router();
 
 // POST /task-requests — public submission
-router.post("/", validate(TaskRequestSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", formLimiter(), validate(TaskRequestSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await taskRequestService.submitRequest(req.body);
     res.status(201).json({
@@ -33,9 +37,10 @@ router.get("/track/:token", async (req: Request, res: Response, next: NextFuncti
 // GET /task-requests — admin only
 router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { status, limit = 100, skip = 0 } = req.query;
+    const { status } = req.query;
+    const { limit, skip } = pageParams(req, { defaultLimit: 100, maxLimit: 500 });
     const filter = status ? { status: String(status) } : {};
-    const result = await taskRequestService.getAllTasks(filter, Number(limit), Number(skip));
+    const result = await taskRequestService.getAllTasks(filter, limit, skip);
     res.json(result);
   } catch (err) {
     next(err);
@@ -55,8 +60,10 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 // PUT /task-requests/:id/status — admin status update
 router.put("/:id/status", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { status, note } = req.body;
-    const task = await taskRequestService.transitionStatus(req.params.id, status, "admin", note);
+    const { status, note, force } = req.body;
+    const task = status === "cancelled"
+      ? await taskRequestService.cancelEngagement(req.params.id, note, force === true)
+      : await taskRequestService.transitionStatus(req.params.id, status, "admin", note);
     await logAudit(req, "status_change", "task", task._id.toString(), task.projectTitle || task.name, { newStatus: status });
     res.json(task);
   } catch (err) {
@@ -64,8 +71,13 @@ router.put("/:id/status", requireAuth, requireRole("admin"), async (req: Request
   }
 });
 
-// PUT /task-requests/:id — admin general update
-router.put("/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+// PUT /task-requests/:id — admin edit of descriptive fields. Workflow state
+// (status, tokens, linked documents, soft-delete) only changes through its own endpoints.
+const TASK_WORKFLOW_FIELDS = [
+  "status", "statusHistory", "trackingToken", "contractToken", "proposalId",
+  "contractSignedAt", "contractClientName", "deletedAt", "deletedBy",
+];
+router.put("/:id", requireAuth, requireRole("admin"), writable(TaskRequest, { protect: TASK_WORKFLOW_FIELDS }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const task = await taskRequestService.updateTask(req.params.id, req.body);
     await logAudit(req, "update", "task", task._id.toString(), task.projectTitle || task.name);

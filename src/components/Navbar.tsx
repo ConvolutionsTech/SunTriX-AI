@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { Menu, X, ChevronDown, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -13,7 +14,7 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [services, setServices] = useState<{name: string, desc: string, href: string}[]>([]);
-  const [companyName, setCompanyName] = useState("SunTriX");
+  const companyName = useCompanyInfo().name || "SunTriX";
   const { t } = useI18n();
   const suntrixLogo = useMedia("suntrix-logo");
 
@@ -26,9 +27,6 @@ const Navbar = () => {
           href: d.href
         })));
       }
-    });
-    apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY).then(({ data }) => {
-      if (data?.data?.name) setCompanyName(data.data.name);
     });
   }, []);
 

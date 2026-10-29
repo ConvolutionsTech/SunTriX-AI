@@ -1,5 +1,7 @@
 import Groq from "groq-sdk";
 import { getSetting } from "../../lib/configLoader";
+import { logger } from "../../lib/logger";
+import { meteredCompletion } from "../../lib/aiBudget";
 
 export interface DiscoveredModel {
   id: string;
@@ -51,11 +53,20 @@ function inferPlanEligibility(id: string): "Available on Groq" | "Free-plan elig
   return "Available on Groq";
 }
 
+// A hung Groq call must not hold a public request open for minutes
+const GROQ_TIMEOUT_MS = 20_000;
+
 export class GroqAdapter {
-  private getClient(): Groq {
+  private client: { key: string; instance: Groq } | null = null;
+
+  /** One client per API key, with a bounded timeout and a single retry. */
+  getClient(): Groq {
     const apiKey = getSetting("GROQ_API_KEY");
-    if (!apiKey) throw new Error("GROQ_API_KEY is missing in system settings.");
-    return new Groq({ apiKey, dangerouslyAllowBrowser: true });
+    if (!apiKey) throw new Error("GROQ_API_KEY is not set in the environment.");
+    if (this.client?.key !== apiKey) {
+      this.client = { key: apiKey, instance: new Groq({ apiKey, timeout: GROQ_TIMEOUT_MS, maxRetries: 1 }) };
+    }
+    return this.client.instance;
   }
 
   /**
@@ -84,7 +95,7 @@ export class GroqAdapter {
       modelCache = { models, timestamp: now };
       return models;
     } catch (err: any) {
-      console.warn(`[GroqAdapter] Failed to fetch dynamic models from Groq API: ${err.message || err}`);
+      logger.warn(`[GroqAdapter] Failed to fetch dynamic models from Groq API: ${err.message || err}`);
       if (modelCache) return modelCache.models;
       return [];
     }
@@ -95,6 +106,8 @@ export class GroqAdapter {
    */
   async validateModelAvailability(modelId: string): Promise<{
     isValid: boolean;
+    /** True when Groq could not be reached, so the model could not be checked either way */
+    unverifiable?: boolean;
     discoveredModel?: DiscoveredModel;
     message?: string;
   }> {
@@ -110,7 +123,7 @@ export class GroqAdapter {
 
     if (available.length === 0) {
       // Offline fallback for testing environment without active Groq API Key
-      return { isValid: false, message: `Model '${modelId}' could not be verified because Groq API key is unconfigured or offline.` };
+      return { isValid: false, unverifiable: true, message: `Model '${modelId}' could not be verified because Groq API key is unconfigured or offline.` };
     }
 
     return {
@@ -137,18 +150,24 @@ export class GroqAdapter {
     const temperature = params.temperature ?? parseFloat(getSetting("GROQ_CHAT_TEMPERATURE", "0.7"));
     const maxTokens = params.maxTokens ?? parseInt(getSetting("GROQ_CHAT_MAX_TOKENS", "1024"));
 
-    console.log(`[GroqAdapter] Executing AI Request | Operation: ${params.operation || "chat"} | Model: ${model} | Temp: ${temperature}`);
+    logger.debug(`[GroqAdapter] Executing AI Request | Operation: ${params.operation || "chat"} | Model: ${model} | Temp: ${temperature}`);
 
     // Direct SDK call — exact configured model is sent without silent replacement
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: params.systemPrompt },
-        ...params.messages,
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    });
+    // Budget check, token metering and metrics (lib/aiBudget.ts)
+    const response = await meteredCompletion(
+      params.operation || "chat",
+      () =>
+        client.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: params.systemPrompt },
+            ...params.messages,
+          ],
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      model
+    );
 
     return response.choices[0]?.message?.content || "";
   }

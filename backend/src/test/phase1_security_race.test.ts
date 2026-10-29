@@ -1,17 +1,22 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import app from "../app";
-import jwt from "jsonwebtoken";
+import { connectTestDb, disconnectTestDb } from "./helpers/db";
+import { staffToken } from "./helpers/auth";
 import Admin from "../models/Admin";
 
 describe("Phase 1 Security & Race Condition Regression Suite", () => {
+  beforeAll(async () => {
+    await connectTestDb();
+  }, 120000);
+
+  afterAll(async () => {
+    await disconnectTestDb();
+  });
 
   describe("1B.3 & 1B.4 — Auth Security & RBAC Enforcement", () => {
     it("should reject viewer role from admin-only write routes with 403 Forbidden", async () => {
-      const viewerToken = jwt.sign(
-        { id: "viewer_1", email: "viewer@suntrix.com", role: "viewer", name: "Viewer User" },
-        process.env.JWT_SECRET || "test_jwt_secret_min_64_chars_long_key_string_for_testing_1234567890"
-      );
+      const viewerToken = await staffToken("viewer");
 
       const res = await request(app)
         .delete("/v1/task-requests/bulk")
@@ -24,10 +29,7 @@ describe("Phase 1 Security & Race Condition Regression Suite", () => {
     });
 
     it("should allow admin role to access protected write routes", async () => {
-      const adminToken = jwt.sign(
-        { id: "admin_1", email: "admin@suntrix.com", role: "admin", name: "Admin User" },
-        process.env.JWT_SECRET || "test_jwt_secret_min_64_chars_long_key_string_for_testing_1234567890"
-      );
+      const adminToken = await staffToken("admin");
 
       // Sending bulk delete with empty array — should pass RBAC check and return 400 (validation error), NOT 403
       const res = await request(app)
@@ -57,8 +59,8 @@ describe("Phase 1 Security & Race Condition Regression Suite", () => {
 
       expect(res.status).toBe(429);
       const errMsg = res.body.message || res.body.error || "";
-      expect(errMsg).toContain("Too many login attempts");
-    });
+      expect(errMsg).toContain("Too many attempts");
+    }, 30000);
   });
 
   describe("1C — Trusted Proxy Configuration", () => {

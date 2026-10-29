@@ -1,17 +1,22 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Department from "../models/Department";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
+
+// Curated lists stay small; the cap only guards against runaway data
+const MAX_LIST = 500;
 
 const router = Router();
 
 // GET /departments — public
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const showAll = req.query.all === "true" || req.headers.authorization?.startsWith("Bearer ");
+    // Hidden/draft items only for a verified staff token — never for a bare Bearer header
+    const showAll = !!req.user;
     const filter = showAll ? {} : { enabled: true };
-    const depts = await Department.find(filter).sort({ order: 1 });
+    const depts = await Department.find(filter).sort({ order: 1 }).limit(MAX_LIST);
     res.json(depts);
   } catch (err) {
     next(err);
@@ -19,7 +24,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // PUT /departments/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -34,7 +39,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // DELETE /departments/bulk — admin bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -45,7 +50,7 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // POST /departments/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
@@ -57,9 +62,9 @@ router.post("/bulk/import", requireAuth, async (req: Request, res: Response, nex
 });
 
 // GET /departments/:id
-router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const dept = await Department.findById(req.params.id);
+    const dept = await Department.findOne({ _id: req.params.id, ...(req.user ? {} : { enabled: true }) });
     if (!dept) return next(createError("Department not found", 404));
     res.json(dept);
   } catch (err) {
@@ -68,7 +73,7 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /departments — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dept = await Department.create(req.body);
     res.status(201).json(dept);
@@ -78,9 +83,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /departments/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const dept = await Department.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const dept = await Department.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!dept) return next(createError("Department not found", 404));
     res.json(dept);
   } catch (err) {

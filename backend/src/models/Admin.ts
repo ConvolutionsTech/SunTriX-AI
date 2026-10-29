@@ -6,6 +6,14 @@ export interface IAdmin extends Document {
   password: string;
   name: string;
   role: "admin" | "viewer";
+  /** Bumped to revoke every access and refresh token issued before it */
+  tokenVersion: number;
+  /** Live refresh-token sessions; rotatedAt marks a token already exchanged */
+  refreshTokens: { jti: string; expiresAt: Date; rotatedAt?: Date }[];
+  passwordChangedAt?: Date;
+  /** sha256 of the single-use password reset token */
+  passwordResetHash?: string;
+  passwordResetExpires?: Date;
   createdAt: Date;
   comparePassword(plain: string): Promise<boolean>;
 }
@@ -13,9 +21,21 @@ export interface IAdmin extends Document {
 const AdminSchema = new Schema<IAdmin>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6 },
+    password: { type: String, required: true, minlength: 12 },
     name: { type: String, required: true, trim: true },
     role: { type: String, enum: ["admin", "viewer"], default: "admin" },
+    tokenVersion: { type: Number, default: 0 },
+    refreshTokens: [
+      {
+        _id: false,
+        jti: { type: String, required: true },
+        expiresAt: { type: Date, required: true },
+        rotatedAt: { type: Date },
+      },
+    ],
+    passwordChangedAt: { type: Date },
+    passwordResetHash: { type: String, index: true, sparse: true },
+    passwordResetExpires: { type: Date },
   },
   { timestamps: true }
 );
@@ -35,6 +55,9 @@ AdminSchema.methods.comparePassword = async function (plain: string): Promise<bo
 AdminSchema.set("toJSON", {
   transform: function (_doc: unknown, ret: any) {
     delete ret.password;
+    delete ret.refreshTokens;
+    delete ret.passwordResetHash;
+    delete ret.passwordResetExpires;
     return ret;
   },
 } as any);

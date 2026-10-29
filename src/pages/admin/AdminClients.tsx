@@ -10,6 +10,7 @@ import { SortControl, SortOption } from "@/components/admin/SortControl";
 import { toast } from "sonner";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { safeHref } from "@/lib/sanitize";
 
 interface Client {
   _id: string;
@@ -207,7 +208,7 @@ const AdminClients = () => {
                   <div>
                     <p className="font-medium text-sm text-foreground">{client.name}</p>
                     {client.websiteUrl && (
-                      <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5">
+                      <a href={safeHref(client.websiteUrl)} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5">
                         <Globe className="h-3 w-3" /> Website
                       </a>
                     )}

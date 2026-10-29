@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { apiRequest, ENDPOINTS, apiUpload } from "@/lib/api";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
+import { safeHref } from "@/lib/sanitize";
 import {
   Upload, Trash2, Search, Copy, Check, Image, Film, FileText,
   Grid3X3, List, X, ExternalLink, Eye, ArrowUpDown, Filter,
@@ -75,35 +76,33 @@ export const AdminMedia = () => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
     setUploading(true);
+    const failures: string[] = [];
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       setUploadProgress(`Uploading (${i + 1}/${fileArray.length}): ${file.name}`);
       const formData = new FormData();
       formData.append("file", file);
-      const token = localStorage.getItem("auth_token");
-
       const isVideo = file.type.startsWith("video/") || [".mp4", ".mov", ".webm", ".avi", ".mkv"].some((ext) => file.name.toLowerCase().endsWith(ext));
       const isDoc = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt"].some((ext) => file.name.toLowerCase().endsWith(ext));
       const endpoint = isVideo ? ENDPOINTS.UPLOAD_VIDEO : isDoc ? ENDPOINTS.UPLOAD_DOCUMENT : ENDPOINTS.UPLOAD_IMAGE;
 
-      await fetch(endpoint, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
+      const { error } = await apiUpload(endpoint, formData);
+      if (error) failures.push(`${file.name}: ${error}`);
     }
 
+    if (failures.length) alert(`Some files could not be uploaded:\n${failures.join("\n")}`);
     setUploading(false);
     setUploadProgress("");
     setShowUploadDropzone(false);
     fetchAssets();
   };
 
-  const handleDelete = async (publicId: string) => {
+  const handleDelete = async (assetId: string) => {
     if (!window.confirm("Delete this digital asset permanently from Cloudinary?")) return;
-    await apiRequest(ENDPOINTS.UPLOAD_DELETE(publicId), { method: "DELETE" });
-    if (selectedAsset?.publicId === publicId) setSelectedAsset(null);
+    const { error } = await apiRequest(ENDPOINTS.UPLOAD_DELETE(assetId), { method: "DELETE" });
+    if (error) alert(error);
+    if (selectedAsset?._id === assetId) setSelectedAsset(null);
     fetchAssets();
   };
 
@@ -111,7 +110,7 @@ export const AdminMedia = () => {
     if (!window.confirm(`Delete ${selectedIds.size} selected assets permanently?`)) return;
     const toDelete = assets.filter((a) => selectedIds.has(a._id));
     for (const a of toDelete) {
-      await apiRequest(ENDPOINTS.UPLOAD_DELETE(a.publicId), { method: "DELETE" });
+      await apiRequest(ENDPOINTS.UPLOAD_DELETE(a._id), { method: "DELETE" });
     }
     setSelectedIds(new Set());
     fetchAssets();
@@ -454,7 +453,7 @@ export const AdminMedia = () => {
                       {copiedId === asset._id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
                     <a
-                      href={asset.url}
+                      href={safeHref(asset.url)}
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -464,7 +463,7 @@ export const AdminMedia = () => {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(asset.publicId); }}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(asset._id); }}
                       className="p-2 rounded-lg bg-destructive/90 text-white hover:bg-destructive transition-colors shadow-xs"
                       title="Delete asset"
                     >
@@ -556,7 +555,7 @@ export const AdminMedia = () => {
                           {copiedId === asset._id ? "Copied!" : "Copy URL"}
                         </button>
                         <button
-                          onClick={() => handleDelete(asset.publicId)}
+                          onClick={() => handleDelete(asset._id)}
                           className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -657,7 +656,7 @@ export const AdminMedia = () => {
                 </button>
 
                 <a
-                  href={selectedAsset.url}
+                  href={safeHref(selectedAsset.url)}
                   target="_blank"
                   rel="noreferrer"
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border/60 bg-background text-foreground text-xs font-semibold hover:bg-muted transition-all"
@@ -666,7 +665,7 @@ export const AdminMedia = () => {
                 </a>
 
                 <button
-                  onClick={() => handleDelete(selectedAsset.publicId)}
+                  onClick={() => handleDelete(selectedAsset._id)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-500 text-xs font-semibold hover:bg-red-500/20 transition-all"
                 >
                   <Trash2 className="h-4 w-4" /> Delete Asset Permanently

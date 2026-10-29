@@ -18,7 +18,7 @@ export interface IPortfolioProject extends Document {
   clientName: string;
   industry: string;
   highlights: string[];
-  status: "published" | "draft";
+  status: "published" | "draft" | "scheduled";
   featured: boolean;
   order: number;
   displayType: "video" | "images";
@@ -49,7 +49,8 @@ const PortfolioSchema = new Schema<IPortfolioProject>(
     clientName: { type: String, default: "" },
     industry: { type: String, default: "" },
     highlights: [{ type: String }],
-    status: { type: String, enum: ["published", "draft"], default: "draft" },
+    // "scheduled" + publishAt: the scheduler publishes it; a draft is never published automatically
+    status: { type: String, enum: ["published", "draft", "scheduled"], default: "draft" },
     featured: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
     publishAt: { type: Date },

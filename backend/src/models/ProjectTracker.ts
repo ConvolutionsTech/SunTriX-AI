@@ -118,7 +118,7 @@ const ProjectTrackerSchema = new Schema<IProjectTracker>(
       paymentRequestedAt: { type: Date },
       paidAt: { type: Date },
       stripePaymentIntentId: { type: String, default: "" },
-      invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice" },
+      invoiceId: { type: Schema.Types.ObjectId, ref: "Payment" },
     }],
     updates: [{
       type: { type: String, enum: ["ProgressUpdate", "Blocker", "MilestoneReached", "ActionRequired"], required: true },

@@ -12,6 +12,22 @@ import {
   Rocket,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { safeHref } from "@/lib/sanitize";
+
+const POLL_INTERVAL_MS = 2000;
+const POLL_ATTEMPTS = 15;
+
+/** GET /payments/invoice/:token */
+interface InvoiceStatus {
+  status: string;
+  amount: number;
+  currency: string;
+  clientEmail: string;
+  description: string;
+  paidAt?: string;
+  receiptUrl?: string;
+  trackingToken?: string;
+}
 
 interface VerifyResult {
   status: string;
@@ -70,24 +86,48 @@ const nextSteps = [
 const PaymentSuccess = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const sessionId = params.get("session_id");
+  const invoiceToken = params.get("invoiceToken");
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // Never an error: Stripe already took the payment; our webhook may just be slow
+  const [pending, setPending] = useState(false);
 
+  // Poll the invoice until the payment webhook has recorded it (≈ 30 s max)
   useEffect(() => {
-    if (!sessionId) {
-      setError("No session ID found.");
+    if (!invoiceToken) {
+      setPending(true);
       setLoading(false);
       return;
     }
-    apiRequest<VerifyResult>(ENDPOINTS.PAYMENT_VERIFY(sessionId))
-      .then(({ data, error: err }) => {
-        if (err || !data) setError("Could not verify payment. Please contact support.");
-        else setResult(data);
-      })
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+    let cancelled = false;
+    let attempt = 0;
+    const poll = async () => {
+      const { data } = await apiRequest<InvoiceStatus>(ENDPOINTS.PAYMENT_INVOICE(invoiceToken));
+      if (cancelled) return;
+      if (data?.status === "paid") {
+        setResult({
+          status: data.status,
+          amount: data.amount,
+          currency: data.currency,
+          email: data.clientEmail,
+          description: data.description,
+          paidAt: data.paidAt || new Date().toISOString(),
+          receiptUrl: data.receiptUrl,
+          trackingToken: data.trackingToken,
+        });
+        setLoading(false);
+      } else if (++attempt >= POLL_ATTEMPTS) {
+        setPending(true);
+        setLoading(false);
+      } else {
+        setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceToken]);
 
   const fmt = (cents: number, currency: string) =>
     new Intl.NumberFormat("en-US", {
@@ -107,12 +147,14 @@ const PaymentSuccess = () => {
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Verifying your payment…</p>
           </div>
-        ) : error ? (
-          <div className="rounded-2xl border border-destructive/30 bg-card p-8 text-center">
-            <p className="text-destructive font-semibold mb-4">{error}</p>
-            <Link to="/contact" className="text-primary underline text-sm">
-              Contact Support
-            </Link>
+        ) : pending ? (
+          <div role="status" className="rounded-2xl border border-border bg-card p-8 text-center space-y-3">
+            <CheckCircle className="h-10 w-10 text-emerald-500 mx-auto" />
+            <p className="font-semibold text-foreground">Payment received — confirmation pending</p>
+            <p className="text-sm text-muted-foreground">
+              Stripe has your payment. We'll email your receipt as soon as it's recorded on our side — usually within a minute.
+            </p>
+            <Link to="/" className="text-primary underline text-sm">Back to Home</Link>
           </div>
         ) : result ? (
           <div className="space-y-4">
@@ -171,7 +213,7 @@ const PaymentSuccess = () => {
 
                   {result.receiptUrl && (
                     <a
-                      href={result.receiptUrl}
+                      href={safeHref(result.receiptUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1 rounded-xl border border-border py-3 text-center text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"

@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
-export type PaymentType = "subscription" | "invoice" | "retainer";
+export type PaymentType = "subscription" | "invoice" | "retainer" | "milestone";
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "cancelled";
 
 export interface IPayment extends Document {
@@ -20,6 +20,12 @@ export interface IPayment extends Document {
   trackingToken: string;   // links back to the TaskRequest tracker
   receiptUrl: string;      // Stripe hosted receipt URL
   expiresAt?: Date;        // invoice expiry (30 days from creation)
+  sessionExpiresAt?: Date;
+  trackerId?: unknown;
+  milestoneId?: unknown;
+  sideEffectsDone: boolean;
+  disputed: boolean;
+  checkoutLock?: Date | null;
   refundId: string;
   refundedAt?: Date;
   refundReason: string;
@@ -34,7 +40,7 @@ const PaymentSchema = new Schema<IPayment>(
     stripePaymentIntentId: { type: String, default: "" },
     stripeCustomerId:      { type: String, default: "" },
 
-    type:   { type: String, enum: ["subscription", "invoice", "retainer"], required: true },
+    type:   { type: String, enum: ["subscription", "invoice", "retainer", "milestone"], required: true },
     status: { type: String, enum: ["pending", "paid", "failed", "refunded", "cancelled"], default: "pending" },
 
     amount:   { type: Number, required: true }, // cents
@@ -51,6 +57,16 @@ const PaymentSchema = new Schema<IPayment>(
     trackingToken: { type: String, default: "" },
     receiptUrl:    { type: String, default: "" },
     expiresAt:     { type: Date },
+    // Open Stripe Checkout session for this invoice (reused instead of creating duplicates)
+    sessionExpiresAt: { type: Date },
+    // Milestone payments: which tracker milestone this pays for
+    trackerId:   { type: Schema.Types.ObjectId, ref: "ProjectTracker", default: null },
+    milestoneId: { type: Schema.Types.ObjectId, default: null },
+    // Set once the post-payment work (project start, milestone, emails) has completed
+    sideEffectsDone: { type: Boolean, default: false },
+    disputed:        { type: Boolean, default: false },
+    // Short-lived lock while a checkout session is being created
+    checkoutLock:     { type: Date, default: null },
 
     refundId:     { type: String, default: "" },
     refundedAt:   { type: Date },
@@ -64,5 +80,9 @@ const PaymentSchema = new Schema<IPayment>(
 PaymentSchema.index({ clientEmail: 1 });
 PaymentSchema.index({ status: 1, createdAt: -1 });
 PaymentSchema.index({ taskRequestId: 1 });
+
+PaymentSchema.index({ stripePaymentIntentId: 1 }, { sparse: true });
+PaymentSchema.index({ status: 1, sideEffectsDone: 1 }); // reconciler
+PaymentSchema.index({ trackerId: 1, milestoneId: 1, status: 1 });
 
 export default mongoose.model<IPayment>("Payment", PaymentSchema);

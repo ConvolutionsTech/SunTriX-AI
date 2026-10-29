@@ -127,7 +127,7 @@ cp .env.example .env
 # 4. Start the development server (with hot reload)
 npm run dev
 # API running at: http://localhost:4000
-# Health check:   http://localhost:4000/health
+# Health check:   http://localhost:4000/health  (readiness incl. DB: /ready)
 ```
 
 ### 2.3 Local Frontend Setup
@@ -149,27 +149,24 @@ npm run dev
 
 ### 2.4 First Admin Account Setup
 
-The platform has no built-in default admin account (seed file removed). To create your first admin:
+The platform has no built-in default admin account. Create the first admin with the idempotent seed script. It does nothing if an admin with that email already exists, so it is safe to run on every deploy.
 
 ```bash
-# In the backend directory, run directly via ts-node:
-npx ts-node -e "
-import 'dotenv/config';
-import { connectDB } from './src/config/db';
-import Admin from './src/models/Admin';
-connectDB().then(async () => {
-  await Admin.create({ email: 'admin@suntrix.com', password: 'your_secure_password', name: 'Admin', role: 'admin' });
-  console.log('Admin created');
-  process.exit(0);
-});
-"
+# In backend/, with MONGODB_URI set:
+ADMIN_SEED_EMAIL=you@yourdomain.com \
+ADMIN_SEED_PASSWORD='at-least-12-characters' \
+ADMIN_SEED_NAME='Your Name' \
+npm run seed:admin            # dev (ts-node)
+
+# In a built image / production:
+npm run seed:admin:prod       # node dist/scripts/seedAdmin.js
 ```
 
-Or use MongoDB Compass to insert directly into the `admins` collection.
+The password must be at least 12 characters, and known weak values such as `admin123` are rejected. Remove the `ADMIN_SEED_*` variables from the environment once the admin exists.
 
 ### 2.5 Environment Variables Reference
 
-See [Section 12.3](#123-environment-variables-full-reference) for the complete reference.
+See [Section 12.3](#123-configuration-reference) for the complete reference.
 
 ---
 
@@ -578,6 +575,8 @@ Not to be confused with "clients" as in people — this is for displaying client
 
 ---
 
+**Library and safety rules.** The media library is read from the `MediaAsset` collection (paged, total in `X-Total-Count`), not from Cloudinary's API. Each upload is recorded with a content hash and a scope: `public` for the library and `project:<taskRequestId>` for client files uploaded in the Project Hub. Re-uploading the same bytes within a scope reuses the existing file; client files never appear in, and can't be deleted from, the library. Library uploads must go to `UPLOAD_DEFAULT_FOLDER` (default `suntrix`) or its `videos`, `docs`, `blog`, `portfolio`, `team`, `clients` or `images` subfolders. HTML, SVG, XML and script files are refused (SVG can be allowed with **Allow SVG uploads** in Settings → Storage). Deletes take the asset id and use the right Cloudinary resource type, also in bulk. After upgrading, run `npm run db:sync-indexes:prod` and then `npm run media:reconcile:prod` once, to list files uploaded before the library was database-backed.
+
 ### 4.17 AI Chat Module (Groq)
 
 **Purpose:** Public AI chatbot widget on the website homepage that answers visitor questions about services, pricing, and portfolio.
@@ -602,6 +601,8 @@ Not to be confused with "clients" as in people — this is for displaying client
 **Master toggle:** `AI_ENABLED = false` disables all AI endpoints.
 
 ---
+
+**Cost controls.** Every Groq call (chat, proposal/contract drafting, extraction, email templates) is metered: token use goes into a daily counter in MongoDB (shared by all instances, survives restarts) and an `AiUsage` row per call (kept 90 days). When the day's tokens reach `AI_DAILY_TOKEN_BUDGET` (Settings → AI, default 500,000; 0 = no limit), AI calls return `429 AI_BUDGET_EXCEEDED` until midnight UTC. The public chatbot also allows `CHAT_DAILY_PER_IP` messages per visitor per day (default 60) → `429 CHAT_DAILY_LIMIT`. The admin dashboard shows today's usage against the budget; `GET /v1/admin/ai-usage?days=7` has the per-day, per-operation breakdown.
 
 ### 4.18 Notifications System
 
@@ -852,6 +853,8 @@ POST /v1/newsletter/broadcast
 ```
 
 ---
+
+**Delivery (durable dispatcher).** Sending a broadcast stores one `CampaignRecipient` row per subscriber and returns at once (`202`, campaign `queued`). A dispatcher job (every 30 s, and immediately after queueing) leases one campaign at a time, sends pending recipients in Resend batches (size `NEWSLETTER_BATCH_SIZE`, max 100, each with an idempotency key) and marks every recipient `sent` or `failed`. If the server restarts mid-send, the lease expires after 2 minutes and the next run, on any instance, carries on without re-sending delivered rows. A campaign ends `sent`, `partially_failed` or `failed`; failures email the admin. **Retry failed** in Admin → Newsletter → Broadcast History re-queues only the failed recipients.
 
 ## 6. Data Models (MongoDB Schemas)
 
@@ -1810,6 +1813,12 @@ The project management view for active projects:
 
 All emails are sent via **Resend** using the `FROM_EMAIL_ADDRESS` setting (must be verified in Resend).
 
+### 10.0 Delivery: outbox, retries and the email log
+
+Transactional emails are not sent inside the request. Each one is written to the `EmailLog` collection (`status: queued`) and a scheduler job delivers due rows every 15 seconds. A failed send is retried with backoff (30 s, 1 min, 2 min, 4 min) up to 5 attempts, then marked `failed`. Several instances can drain at once; each row is claimed atomically. Admin replies to contact messages are sent immediately (the admin waits for the result) but are logged too. Newsletter broadcasts use Resend's batch API directly.
+
+Without `RESEND_API_KEY`, emails fail with `EMAIL_NOT_CONFIGURED` instead of being "sent" with a dummy key. The admin dashboard then shows a red "Email is not configured" banner, or "Some emails could not be delivered" with a list of failures and a Retry button. API: `GET /v1/admin/email-log?status=failed` and `POST /v1/admin/email-log/:id/retry` (admin only). Delivered rows are kept for 90 days.
+
 ### 10.1 Email Templates (Complete List)
 
 | Function | Trigger | Recipient | Subject |
@@ -2004,64 +2013,158 @@ VITE_API_URL=https://suntrix-backend.onrender.com/v1
 
 ---
 
-### 12.3 Environment Variables (Full Reference)
+**Headers (`vercel.json`).** Every page gets HSTS (2 years, preload), `nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and a Permissions-Policy. `index.html` and routes are `no-cache`; hashed files under `/assets/` are cached for a year (`immutable`). The Content-Security-Policy ships as **Report-Only**: check the browser console on the live site (public pages, admin, proposal/contract/invoice/tracker pages, Stripe redirect, YouTube/Vimeo embeds), then rename the header to `Content-Security-Policy` and narrow `connect-src` to the API and Sentry domains.
 
-| Variable | Required | Description | Set In |
+**SEO.** `public/robots.txt` disallows the admin and every capability-link path (`/proposal/`, `/contract/`, `/invoice/`, `/track/`, `/client/`, `/payment/`), and those pages also get `<meta name="robots" content="noindex, nofollow">` at runtime. The API serves a sitemap at `GET /v1/sitemap.xml` (static pages + published posts and portfolio items, cached 1 h). To publish it at `https://www.suntrix.ai/sitemap.xml`, add a `vercel.json` rewrite from `/sitemap.xml` to `<API URL>/v1/sitemap.xml` and uncomment the `Sitemap:` line in `robots.txt`.
+
+**Personal data requests.** The privacy policy tells people to email the privacy address to access, correct or delete their data. To delete a request's personal data, an admin deletes it from Admin → Tasks (soft delete) or, for full erasure, removes the `TaskRequest`, its proposals, contracts and tracker, and the matching `Newsletter`/`ContactMessage` rows; payments are kept for tax records with the email retained. *(Retention periods and the erasure procedure need sign-off — see Open Questions.)*
+
+### 12.3 Configuration Reference
+
+<!-- settings:start (generated by `npm run docs:settings` — do not edit by hand) -->
+**Environment only** (host secret store / `.env`; never read from the database):
+
+| Variable | Required | Notes |
+|---|---|---|
+| `NODE_ENV` | Yes | `development`, `test` or `production` |
+| `PORT` | No | HTTP port (default 4000) |
+| `MONGODB_URI` | Yes | MongoDB connection string |
+| `FRONTEND_URL` | Yes | Public site URL: CORS origin and base for links in emails |
+| `CORS_ORIGINS` | No | Extra allowed browser origins, comma-separated |
+| `TRUST_PROXY` | Production | Number of proxies in front of the API (for client IPs and rate limits) |
+| `JWT_SECRET` | Yes | ≥ 32 random chars — `openssl rand -base64 48` |
+| `JWT_REFRESH_SECRET` | Yes | ≥ 32 random chars, different from `JWT_SECRET` |
+| `JWT_EXPIRY` | No | Access-token lifetime (default `15m`) |
+| `STRIPE_SECRET_KEY` | Production | `sk_live_…` / `sk_test_…` |
+| `STRIPE_WEBHOOK_SECRET` | Production | `whsec_…` for the webhook endpoint |
+| `RESEND_API_KEY` | Production | `re_…`; without it emails fail as `EMAIL_NOT_CONFIGURED` |
+| `GROQ_API_KEY` | For AI | Groq API key |
+| `CLOUDINARY_CLOUD_NAME` | Production | Cloudinary cloud |
+| `CLOUDINARY_API_KEY` | Production | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | Production | Cloudinary API secret |
+| `LOG_LEVEL` | No | `fatal`…`debug`/`silent` |
+| `SENTRY_DSN` | No | Error tracking |
+| `METRICS_TOKEN` | No | Enables `GET /metrics` |
+| `GIT_SHA` | No | Build revision (set by the Docker build) |
+| `ADMIN_SEED_EMAIL / _PASSWORD / _NAME` | Seeding only | First admin for `npm run seed:admin` (password ≥ 12 chars) |
+
+**Runtime settings** (Admin → Settings; stored in MongoDB, fall back to an env var of the same name, then the default):
+
+| Key | Section | Meaning | Default |
 |---|---|---|---|
-| `NODE_ENV` | Yes | `development` or `production` | .env / Render |
-| `PORT` | Yes | Server port (default 4000) | .env / Render |
-| `MONGODB_URI` | Yes | MongoDB Atlas connection string | .env / Render |
-| `FRONTEND_URL` | Yes | Frontend URL for CORS and email links | .env / Render |
-| `JWT_SECRET` | Yes | Min 64-char secret for JWT signing | .env / Render / Settings |
-| `CLOUDINARY_CLOUD_NAME` | Yes | Cloudinary cloud name | .env / Render / Settings |
-| `CLOUDINARY_API_KEY` | Yes | Cloudinary API key | .env / Render / Settings |
-| `CLOUDINARY_API_SECRET` | Yes | Cloudinary API secret | .env / Render / Settings |
-| `GROQ_API_KEY` | Yes (for AI) | Groq API key | .env / Render / Settings |
-| `RESEND_API_KEY` | Yes (for email) | Resend API key | .env / Render / Settings |
-| `ADMIN_EMAIL` | Yes | Admin notification recipient email | .env / Render / Settings |
-| `STRIPE_SECRET_KEY` | Yes (for payments) | Stripe secret key | .env / Render / Settings |
-| `STRIPE_WEBHOOK_SECRET` | Yes (for payments) | Stripe webhook signing secret | .env / Render / Settings |
-| `FROM_EMAIL_NAME` | No | Sender name (default: "SunTriX") | Settings |
-| `FROM_EMAIL_ADDRESS` | No | Sender email (default: onboarding@resend.dev) | Settings |
-| `BRAND_NAME` | No | Company name used throughout | Settings |
+| `AI_ENABLED` | ai | Enable AI features — Master switch for the chatbot and AI drafting | `true` |
+| `AI_DAILY_TOKEN_BUDGET` | ai | Daily AI token budget — All AI calls stop for the day (UTC) once this many tokens are used; 0 = no limit | `500000` |
+| `CHAT_DAILY_PER_IP` | ai | Chat messages per visitor per day — Website chatbot cap per IP address; 0 = no limit | `60` |
+| `GROQ_CHAT_MODEL` | ai | Chat & Generation AI Model — Groq model used for AI Chatbot, Proposals, Contracts & Email Templates | `llama-3.1-8b-instant` |
+| `GROQ_EXTRACT_MODEL` | ai | Extraction AI Model — Groq model used for fast structured JSON field extraction | `llama-3.1-8b-instant` |
+| `GROQ_CHAT_TEMPERATURE` | ai | Chat Temperature — Creativity index (0.0 to 1.0) | `0.7` |
+| `GROQ_CHAT_MAX_TOKENS` | ai | Chat Max Tokens — Upper bound on response length | `1024` |
+| `GROQ_EMAIL_TEMPERATURE` | ai | Email/Document Temperature — Blank = built-in default | — |
+| `GROQ_EMAIL_MAX_TOKENS` | ai | Email/Document Max Tokens — Blank = built-in default | — |
+| `CHATBOT_ENABLED` | chatbot | Enable Website Chatbot | `true` |
+| `CHATBOT_NAME` | chatbot | Chatbot Name | `SunTriX AI Assistant` |
+| `CHATBOT_WELCOME_MESSAGE` | chatbot | Welcome Message | `Hello! How can SunTriX help build or scale your AI solutions today?` |
+| `CHATBOT_SYSTEM_PROMPT` | chatbot | Custom System Prompt — Blank = built automatically from your brand settings and links | — |
+| `CHATBOT_MAX_WORDS` | chatbot | Max Response Length (Words) | `150` |
+| `CHATBOT_CONTACT_LINK` | chatbot | Contact Link — Blank = built-in default | — |
+| `CHATBOT_PORTFOLIO_LINK` | chatbot | Portfolio Link — Blank = built-in default | — |
+| `CHATBOT_PRICING_LINK` | chatbot | Pricing Link — Blank = built-in default | — |
+| `EMAIL_FROM` | email | From (full header) — e.g. "SunTriX <hello@yourdomain.com>". Blank = built from name + address | — |
+| `FROM_EMAIL_NAME` | email | Sender Name | — |
+| `FROM_EMAIL_ADDRESS` | email | Sender Address — Must be on a domain verified in Resend | — |
+| `ADMIN_EMAIL` | email | Admin Email — Receives admin notifications | — |
+| `ADMIN_NOTIFICATION_EMAIL` | email | Notification Email Override — Blank = Admin Email | — |
+| `EMAIL_CONTACT_NOTIFICATIONS` | email | Notify on contact messages | `true` |
+| `EMAIL_TASK_NOTIFICATIONS` | email | Notify on project requests | `true` |
+| `EMAIL_KICKOFF_SLA` | email | Kickoff SLA text — Shown in payment confirmation emails | — |
+| `EMAIL_PAYMENT_SLA` | email | Payment SLA text | — |
+| `UPLOAD_DEFAULT_FOLDER` | storage | Default Upload Folder | — |
+| `UPLOAD_ALLOW_SVG` | storage | Allow SVG uploads — SVGs can carry scripts; only enable if every uploader is trusted | `false` |
+| `UPLOAD_MAX_SIZE_MB` | storage | Max Upload Size (MB) | — |
+| `BRAND_NAME` | brand | Brand Name | — |
+| `BRAND_EMAIL` | brand | Brand Email | — |
+| `BRAND_WEBSITE` | brand | Website | — |
+| `BRAND_TAGLINE` | brand | Tagline | — |
+| `BRAND_RESPONSE_TIME` | brand | Response Time Promise | — |
+| `BRAND_PROPOSAL_GUARANTEE` | brand | Proposal Guarantee | — |
+| `NEWSLETTER_DOUBLE_OPTIN` | newsletter | Require Double Opt-in | `false` |
+| `NEWSLETTER_BATCH_SIZE` | newsletter | Send Batch Size | — |
+| `NEWSLETTER_FOOTER_TEXT` | newsletter | Footer Text | — |
+| `MAINTENANCE_MODE` | security | Maintenance Mode — Public site returns 503; admin and client links keep working | `false` |
+| `RATE_LIMIT_MAX` | security | Requests per 15 min per IP | — |
+| `RATE_LIMIT_AUTH_MAX` | security | Sign-in attempts per 15 min per IP — Login, forgot-password and reset | — |
+| `RATE_LIMIT_CONTACT` | security | Form submissions per hour per IP | — |
+| `RATE_LIMIT_CHAT` | security | Chat messages per minute per IP | — |
+| `AUDIT_LOG_RETENTION_DAYS` | security | Audit Log Retention (days) | — |
+<!-- settings:end -->
 
 ### 12.4 Updating & Redeploying
 
-**Backend code change:**
-1. Make changes in `/backend/src`
-2. Run: `docker build -t suntrix-backend-prod . && docker tag suntrix-backend-prod muhammadtahirsundhu/suntrix-backend:latest && docker push muhammadtahirsundhu/suntrix-backend:latest`
-3. Render → Manual Deploy
-
-**Frontend code change:**
-1. Make changes in `/src`
-2. `git add . && git commit && git push origin main`
-3. Vercel auto-deploys (3–5 min)
+**Code change (backend or frontend):** open a PR, let CI pass, merge to `main`. CI publishes the API image `ghcr.io/<owner>/suntrix-api:<git-sha>`; deploy that tag on the API host. Vercel deploys the frontend from `main`. Rollback and incident steps are in `RUNBOOK.md`.
 
 **Config/setting change (no redeploy needed):**
 1. Go to Admin → Settings
 2. Update the value
-3. Change takes effect immediately (settings loaded into process.env in-memory cache)
+3. Change takes effect immediately on the instance that saved it, and on every other instance within ~15 s (they poll a settings version)
+
+---
+
+### 12.5 Operations: logs, health, metrics and alerts
+
+**Logs.** The API writes one JSON line per event (pino), pretty-printed only when `NODE_ENV=development`. Every request gets an `X-Request-Id` (an incoming one is reused if it is a plain id), and the same id appears in error responses (`requestId`) and in Sentry. Authorization headers, cookies, Stripe signatures and the token in capability links (`/proposals/view/:token`, `/contracts/:token`, `/payments/invoice/:token`, `/tracker/client/:token`, `/task-requests/track/:token`, newsletter and password-reset links) are never logged. Set the level with `LOG_LEVEL`.
+
+**Health.**
+
+| Endpoint | Meaning | Use it for |
+|---|---|---|
+| `GET /health` | The process is up (`{ "status": "ok" }`) | Liveness probe |
+| `GET /ready` | MongoDB answers a ping within 2 s and the process is not shutting down; otherwise `503 { status: "not_ready", reason }` | Readiness probe, load-balancer health check, Docker `HEALTHCHECK`, external uptime check |
+
+On `SIGTERM`/`SIGINT` the API fails `/ready`, stops the cron jobs, finishes in-flight requests, closes MongoDB and exits within 10 s. An unhandled rejection or uncaught exception is logged (and sent to Sentry) and the process exits with code 1 so the orchestrator restarts it.
+
+**Error tracking (optional).** Set `SENTRY_DSN` (backend) and `VITE_SENTRY_DSN` (frontend build) to report errors to Sentry. Only 5xx errors are reported from the API, tagged with `requestId`. Events carry no request bodies, headers, cookies, emails or capability tokens. `GIT_SHA` (if set) becomes the Sentry release. The frontend shows a "Something went wrong" page with a reload button instead of a blank screen when rendering crashes.
+
+**Metrics (optional).** Set `METRICS_TOKEN` to enable `GET /metrics` (Prometheus text format); scrape it with `Authorization: Bearer <METRICS_TOKEN>`. Without the token the endpoint returns 404.
+
+| Metric | Labels |
+|---|---|
+| `http_requests_total` | `route` (Express pattern, e.g. `/v1/contracts/:token`), `method`, `status` |
+| `http_request_duration_seconds` | `route`, `method` |
+| `stripe_webhook_events_total` | `type`, `result` = `ok` / `duplicate` / `invalid` / `retry` |
+| `groq_requests_total` | `operation`, `result` = `ok` / `error` |
+| `email_send_total` | `kind` = `single` / `batch`, `result` = `ok` / `error` |
+| Node defaults | heap, event-loop lag, GC, CPU, open handles |
+
+**Recommended alerts.**
+
+| Alert | Rule (PromQL or check) |
+|---|---|
+| API error rate | `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.02` |
+| Not ready | `/ready` failing for more than 2 minutes (uptime monitor, every minute) |
+| Stripe webhooks failing | `increase(stripe_webhook_events_total{result=~"invalid\|retry"}[15m]) > 0` — also check the Stripe dashboard's webhook page |
+| Groq spend | The API enforces `AI_DAILY_TOKEN_BUDGET` itself (429 `AI_BUDGET_EXCEEDED` until midnight UTC); alert on `increase(groq_requests_total{result="error"}[1h]) > 10` and watch the dashboard's AI usage card |
+| Email failures | `increase(email_send_total{result="error"}[30m]) > 5` |
+| Latency | `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 2` |
+
+Post-payment work that fails after a successful payment is retried every 5 minutes and, if it keeps failing, emails `ADMIN_EMAIL` (see §13).
 
 ---
 
 ## 13. Background Jobs & Scheduler
 
-The scheduler starts automatically when the backend boots (`startScheduler()` called in `start()`).
+The scheduler starts automatically when the backend boots (`startScheduler()` in `start()`) and stops on shutdown. With several instances, jobs marked *once per tick* take a lease in `SchedulerLock` so only one instance runs each tick, and every such run is recorded in `JobRun` (kept 30 days) with its result or error. The other jobs are safe to run on every instance.
 
-### Job 1: Auto-Publish Scheduled Content
-- **Schedule:** Every 5 minutes (`*/5 * * * *`)
-- **What it does:**
-  - Queries all `Post` documents with `status: "scheduled"` and `publishAt <= now()`
-  - Sets them to `status: "published"`, records `publishedAt`
-  - Queries all `Portfolio` documents with `status: "draft"` and `publishAt <= now()`
-  - Sets them to `status: "published"`
+| Job | Schedule | Runs on | What it does |
+|---|---|---|---|
+| Settings refresh | every 15 s | every instance | Reloads runtime settings when another instance changed them |
+| Email outbox | every 15 s | every instance (rows claimed atomically) | Delivers queued transactional email with retries (§10.0) |
+| Campaign dispatcher | every 30 s | every instance (campaigns leased) | Sends queued newsletter campaigns, resumes interrupted ones (§5.5) |
+| `reconcile-payments` | every 5 min | once per tick | Finishes post-payment work that failed after a successful payment |
+| `expire-lifecycle` | every 5 min | once per tick | Expires proposals/contracts past `expiresAt`, releases acceptances stuck in `processing`, fails legacy broadcasts lost to a restart |
+| `auto-publish` | every 5 min | once per tick | Publishes posts with `status: "scheduled"` and portfolio items with `status: "scheduled"` whose `publishAt` has passed (portfolio `publishAt` is then cleared). A draft is never published automatically, so un-publishing an item sticks. Saving a draft with a future `publishAt` makes it `scheduled`. |
+| `audit-retention` | daily 02:00 | once per tick | Deletes audit entries older than `AUDIT_LOG_RETENTION_DAYS` (default 90) |
 
-### Job 2: Audit Log Retention Cleanup
-- **Schedule:** Daily at 2:00 AM (`0 2 * * *`)
-- **What it does:**
-  - Reads `AUDIT_LOG_RETENTION_DAYS` from settings (default: 90)
-  - Deletes all `AuditLog` entries older than that cutoff date
-  - If retention days = 0, keeps all logs forever
+Invoices are not expired by a job: an invoice past `expiresAt` refuses checkout with `410`.
 
 ---
 

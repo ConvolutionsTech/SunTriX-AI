@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export type AuditAction = "create" | "update" | "delete" | "publish" | "login" | "bulk_delete" | "bulk_update" | "status_change" | "broadcast" | "reorder" | "bulk_import";
+export type AuditAction = "create" | "update" | "delete" | "publish" | "login" | "login_failed" | "bulk_delete" | "bulk_update" | "status_change" | "broadcast" | "reorder" | "bulk_import" | "reply" | "upload";
 
 export interface IAuditLog extends Document {
   action: AuditAction;
@@ -17,7 +17,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
   {
     action: {
       type: String,
-      enum: ["create", "update", "delete", "publish", "login", "bulk_delete", "bulk_update", "status_change", "broadcast", "reorder", "bulk_import"],
+      enum: ["create", "update", "delete", "publish", "login", "login_failed", "bulk_delete", "bulk_update", "status_change", "broadcast", "reorder", "bulk_import", "reply", "upload"],
       required: true,
     },
     entity: { type: String, required: true },
@@ -33,5 +33,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
 AuditLogSchema.index({ entity: 1, createdAt: -1 });
 AuditLogSchema.index({ adminId: 1 });
 AuditLogSchema.index({ action: 1 });
+
+AuditLogSchema.index({ createdAt: 1 }); // retention cleanup (lib/scheduler.ts)
 
 export default mongoose.model<IAuditLog>("AuditLog", AuditLogSchema);

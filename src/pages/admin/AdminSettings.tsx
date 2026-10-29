@@ -3,7 +3,7 @@ import { ENDPOINTS, apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
-  Bot, Mail, CreditCard, HardDrive, Building2, MessageSquare,
+  Bot, Mail, HardDrive, Building2, MessageSquare,
   Newspaper, Shield, Eye, EyeOff, Save, RefreshCw, CheckCircle2,
   AlertCircle, ChevronRight, Loader2, ToggleLeft, ToggleRight,
   Settings2, Lock, Info, Sparkles,
@@ -31,7 +31,7 @@ interface DiscoveredModel {
   planEligibility: string;
 }
 
-type SectionId = "ai" | "email" | "payment" | "storage" | "brand" | "chatbot" | "newsletter" | "security";
+type SectionId = "ai" | "email" | "storage" | "brand" | "chatbot" | "newsletter" | "security";
 
 // ─── Section metadata ─────────────────────────────────────────────────────
 const SECTIONS: {
@@ -43,14 +43,13 @@ const SECTIONS: {
   border: string;
   description: string;
 }[] = [
-  { id: "ai",         label: "AI & Groq",       icon: Bot,          color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30", description: "Dynamic Groq models discovery, API keys and AI behaviour" },
+  { id: "ai",         label: "AI & Groq",       icon: Bot,          color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/30", description: "Dynamic Groq models discovery and AI behaviour" },
   { id: "chatbot",    label: "Chatbot",          icon: MessageSquare,color: "text-blue-400",   bg: "bg-blue-500/10",   border: "border-blue-500/30",   description: "Website chatbot prompt, links and toggles" },
-  { id: "email",      label: "Email",            icon: Mail,         color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/30", description: "Resend key, sender address and notification toggles" },
-  { id: "payment",    label: "Payments",         icon: CreditCard,   color: "text-green-400",  bg: "bg-green-500/10",  border: "border-green-500/30",  description: "Stripe keys, mode toggle and invoice settings" },
-  { id: "storage",    label: "File Storage",     icon: HardDrive,    color: "text-cyan-400",   bg: "bg-cyan-500/10",   border: "border-cyan-500/30",   description: "Cloudinary credentials and upload limits" },
+  { id: "email",      label: "Email",            icon: Mail,         color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/30", description: "Sender address and notification toggles" },
+  { id: "storage",    label: "File Storage",     icon: HardDrive,    color: "text-cyan-400",   bg: "bg-cyan-500/10",   border: "border-cyan-500/30",   description: "Upload folder and size limits" },
   { id: "brand",      label: "Brand & Identity", icon: Building2,    color: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-500/30",  description: "Company name, links and brand copy" },
   { id: "newsletter", label: "Newsletter",       icon: Newspaper,    color: "text-pink-400",   bg: "bg-pink-500/10",   border: "border-pink-500/30",   description: "Batch size, opt-in and footer text" },
-  { id: "security",   label: "Security",         icon: Shield,       color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-500/30",    description: "JWT secret, session expiry and rate limits" },
+  { id: "security",   label: "Security & Ops",   icon: Shield,       color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-500/30",    description: "Maintenance mode, rate limits and audit retention" },
 ];
 
 // ─── Individual field component ────────────────────────────────────────────
@@ -385,7 +384,7 @@ const AdminSettings = () => {
       return;
     }
 
-    const { data, error } = await apiRequest<{ saved: number; errors?: string[] }>(
+    const { data, error } = await apiRequest<{ saved: number; errors?: string[]; warnings?: string[] }>(
       ENDPOINTS.SETTINGS_BULK,
       { method: "PATCH", body: { updates } }
     );
@@ -395,7 +394,7 @@ const AdminSettings = () => {
     if (error || (data && data.errors && data.errors.length > 0)) {
       showToast("error", error || (data?.errors ? data.errors.join(", ") : "Failed to save settings"));
     } else {
-      showToast("success", `Saved ${sectionId.toUpperCase()} settings successfully`);
+      showToast("success", data?.warnings?.length ? data.warnings.join(" ") : `Saved ${sectionId.toUpperCase()} settings successfully`);
       const keys = new Set(updates.map((u) => u.key));
       setSavedKeys(keys);
       setTimeout(() => setSavedKeys(new Set()), 3000);
@@ -470,7 +469,10 @@ const AdminSettings = () => {
           </div>
 
           {/* Active section settings panel */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              API keys and secrets (Stripe, Resend, Cloudinary, Groq, JWT) are set in the server environment and are not editable here.
+            </p>
             <SectionPanel
               section={activeSectionData}
               settings={sectionSettings}

@@ -68,7 +68,14 @@ export function useSEO(meta: SEOMeta) {
     // Core meta
     setMetaName("description", meta.description);
     if (meta.keywords) setMetaName("keywords", meta.keywords);
-    if (meta.noIndex) setMetaName("robots", "noindex, nofollow");
+    // Page-level noindex lives in its own tag so it can be removed when the page unmounts
+    let noIndexTag: HTMLMetaElement | null = null;
+    if (meta.noIndex) {
+      noIndexTag = document.createElement("meta");
+      noIndexTag.name = "robots";
+      noIndexTag.content = "noindex, nofollow";
+      document.head.appendChild(noIndexTag);
+    }
 
     // Open Graph
     setMetaProperty("og:title", meta.ogTitle || meta.title);
@@ -88,9 +95,10 @@ export function useSEO(meta: SEOMeta) {
 
     // Cleanup on unmount (reset to defaults)
     return () => {
+      noIndexTag?.remove();
       document.title = "SunTriX — AI Solutions";
     };
-  }, [meta.title, meta.description, meta.ogImage, meta.canonicalUrl]);
+  }, [meta.title, meta.description, meta.ogImage, meta.canonicalUrl, meta.noIndex]);
 }
 
 export default useSEO;

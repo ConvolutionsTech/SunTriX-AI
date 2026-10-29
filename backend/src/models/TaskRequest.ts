@@ -94,4 +94,6 @@ TaskRequestSchema.index({ status: 1, createdAt: -1 });
 TaskRequestSchema.index({ email: 1 });
 TaskRequestSchema.index({ contractToken: 1 });
 
+TaskRequestSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
+
 export default mongoose.model<ITaskRequest>("TaskRequest", TaskRequestSchema);

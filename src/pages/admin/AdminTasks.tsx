@@ -39,11 +39,11 @@ interface TaskRequest {
 }
 
 const LIFECYCLE_STAGES = [
-  { id: "submitted", label: "Request", desc: "New inquiries", icon: Inbox, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
-  { id: "reviewing", label: "Review", desc: "Engineering evaluation", icon: FileSearch, color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
+  { id: "new", label: "Request", desc: "New inquiries", icon: Inbox, color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
+  { id: "in_review", label: "Review", desc: "Engineering evaluation", icon: FileSearch, color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
   { id: "proposal_sent", label: "Proposal", desc: "Proposal drafted & sent", icon: FileText, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
   { id: "contract_sent", label: "Contract", desc: "Contract pending signature", icon: FileCheck, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-  { id: "accepted", label: "Payment", desc: "Deposit paid / signed", icon: CreditCard, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+  { id: "contract_signed", label: "Signed", desc: "Contract signed, awaiting deposit", icon: CreditCard, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
   { id: "in_progress", label: "Project", desc: "Active engineering sprint", icon: Rocket, color: "text-indigo-500", bg: "bg-indigo-500/10 border-indigo-500/20" },
   { id: "completed", label: "Completed", desc: "Delivered & signed off", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10 border-green-500/20" },
   { id: "cancelled", label: "Cancelled", desc: "Closed or inactive", icon: XCircle, color: "text-zinc-500", bg: "bg-zinc-500/10 border-zinc-500/20" },
@@ -51,11 +51,11 @@ const LIFECYCLE_STAGES = [
 
 const TABS = [
   { id: "all", label: "All Engagements" },
-  { id: "submitted", label: "New Requests" },
-  { id: "reviewing", label: "In Review" },
+  { id: "new", label: "New Requests" },
+  { id: "in_review", label: "In Review" },
   { id: "proposal_sent", label: "Proposal Sent" },
   { id: "contract_sent", label: "Contract Sent" },
-  { id: "accepted", label: "Payment / Signed" },
+  { id: "contract_signed", label: "Contract Signed" },
   { id: "in_progress", label: "Active Project" },
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },
@@ -116,14 +116,8 @@ export const AdminTasks = () => {
   const filteredTasks = useMemo(() => {
     return tasks
       .filter((t) => {
-        const matchesTab =
-          activeTab === "all"
-            ? true
-            : activeTab === "accepted"
-            ? t.status === "accepted" || t.status === "signed"
-            : activeTab === "cancelled"
-            ? t.status === "cancelled" || t.status === "rejected"
-            : t.status === activeTab;
+        // Tabs and columns use the backend status names directly
+        const matchesTab = activeTab === "all" || t.status === activeTab;
 
         const matchesService = serviceFilter === "all" || t.service === serviceFilter;
         const matchesPriority = priorityFilter === "all" || (t.priority || "normal").toLowerCase() === priorityFilter.toLowerCase();
@@ -152,14 +146,7 @@ export const AdminTasks = () => {
   }, [tasks, activeTab, serviceFilter, priorityFilter, search, sortOption]);
 
   const tabsWithCounts = TABS.map((tab) => {
-    const count =
-      tab.id === "all"
-        ? tasks.length
-        : tab.id === "accepted"
-        ? tasks.filter((t) => t.status === "accepted" || t.status === "signed").length
-        : tab.id === "cancelled"
-        ? tasks.filter((t) => t.status === "cancelled" || t.status === "rejected").length
-        : tasks.filter((t) => t.status === tab.id).length;
+    const count = tab.id === "all" ? tasks.length : tasks.filter((t) => t.status === tab.id).length;
     return { ...tab, count };
   });
 
@@ -270,11 +257,7 @@ export const AdminTasks = () => {
           <div className="flex items-start gap-4 min-w-[2400px]">
             {LIFECYCLE_STAGES.map((stage) => {
               const StageIcon = stage.icon;
-              const stageTasks = filteredTasks.filter((t) => {
-                if (stage.id === "accepted") return t.status === "accepted" || t.status === "signed";
-                if (stage.id === "cancelled") return t.status === "cancelled" || t.status === "rejected";
-                return t.status === stage.id;
-              });
+              const stageTasks = filteredTasks.filter((t) => t.status === stage.id);
 
               return (
                 <div

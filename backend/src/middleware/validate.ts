@@ -9,7 +9,7 @@ export function validate<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      const errors = result.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -81,7 +81,7 @@ export const ProposalRequestChangesSchema = z.object({
 // POST /contracts/:token/sign
 export const ContractSignSchema = z.object({
   clientSignatureName: z.string().trim().min(2, "Please type your full name").max(120, "Name too long"),
-  agreed: z.literal(true, { errorMap: () => ({ message: "You must agree to the contract terms" }) }),
+  agreed: z.literal(true, { error: "You must agree to the contract terms" }),
 });
 
 // POST /tracker/client/:token/chat (and admin chat)
@@ -91,8 +91,25 @@ export const ChatMessageSchema = z.object({
 
 // POST /tracker/client/:token/update
 export const TrackerUpdateSchema = z.object({
-  title:   shortStr("Title"),
-  content: longStr("Content", 3000),
+  type: z.enum(["ProgressUpdate", "Blocker", "MilestoneReached", "ActionRequired"]),
+  body: longStr("Update", 3000),
+  nextUpdateDue: z.coerce.date().optional(),
+});
+
+export const TRACKER_PHASES = ["Discovery", "Design", "Development", "Testing", "Delivery"] as const;
+
+export const PhaseAdvanceSchema = z.object({
+  nextPhase: z.enum(TRACKER_PHASES),
+  adminNote: z.string().trim().max(2000).optional(),
+});
+
+export const DeliverableCompleteSchema = z.object({
+  attachedUrl: z.union([z.literal(""), z.string().trim().url().max(2048).refine((v) => /^https?:\/\//i.test(v), "Must be an http(s) URL")]).optional(),
+});
+
+export const MarkPaidManuallySchema = z.object({
+  paymentMethod: z.string().trim().max(100).optional(),
+  note: z.string().trim().max(2000).optional(),
 });
 
 // ─── ADMIN SCHEMAS ─────────────────────────────────────────────────────────
@@ -115,6 +132,34 @@ export const RefreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
 });
 
+const newPassword = z.string().min(12, "Password must be at least 12 characters").max(128, "Password too long");
+
+// POST /auth/password — signed-in admin changes their own password
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(200),
+  newPassword,
+});
+
+// POST /auth/forgot
+export const ForgotPasswordSchema = z.object({ email });
+
+// POST /auth/reset/:token
+export const ResetPasswordSchema = z.object({ password: newPassword });
+
+// POST /admin/users — create admin user
+export const AdminUserCreateSchema = z.object({
+  email,
+  name,
+  role: z.enum(["admin", "viewer"]),
+  password: newPassword,
+});
+
+// PATCH /admin/users/:id
+export const AdminUserUpdateSchema = z.object({
+  name: name.optional(),
+  role: z.enum(["admin", "viewer"]).optional(),
+});
+
 // POST /proposals/admin/ai-draft
 export const ProposalGenerateSchema = z.object({
   taskRequestId: z.string().min(1, "taskRequestId is required"),
@@ -127,12 +172,16 @@ export const ProposalCreateSchema = z.object({
   introduction: optStr,
   scopeItems: z.array(z.string()).optional().default([]),
   timeline: optStr,
+  // Money is integer cents (lib/money.ts)
+  totalAmount: z.number().int("totalAmount must be whole cents").min(100, "Total must be at least $1.00"),
+  currency: z.enum(["usd"]).optional().default("usd"),
+  expiresInDays: z.number().int().min(1).max(90).optional().default(14),
   milestones: z.array(z.object({
     title: shortStr("Milestone title"),
     description: optStr,
-    amount: z.number().min(1, "Milestone amount must be at least $1"),
+    amount: z.number().int("Milestone amount must be whole cents").min(100, "Milestone amount must be at least $1.00 (in cents)"),
     dueWeek: z.number().min(0).optional().default(0),
-  })).min(1, "At least one milestone is required"),
+  })).min(1, "At least one milestone is required").max(20, "At most 20 milestones"),
   terms: optStr,
   executiveSummary: optStr,
   scopeOfWork: optStr,
@@ -146,13 +195,35 @@ export const ProposalCreateSchema = z.object({
   clientEmail: email,
   clientName: optStr,
   aiDrafted: z.boolean().optional().default(false),
+}).superRefine((p, ctx) => {
+  const sum = p.milestones.reduce((total, m) => total + m.amount, 0);
+  if (sum !== p.totalAmount) {
+    ctx.addIssue({ code: "custom", path: ["milestones"], message: `Milestones add up to ${sum} cents but totalAmount is ${p.totalAmount}` });
+  }
+
+});
+
+// POST /contact/reply — recipient comes from the stored message, never the request
+export const ContactReplySchema = z.object({
+  messageId: z.string().regex(/^[a-f\d]{24}$/i, "messageId is required"),
+  subject:   z.string().trim().min(1, "Subject is required").max(200, "Subject too long"),
+  body:      z.string().trim().min(1, "Message is required").max(20000, "Message too long"),
+});
+
+// POST /payments/admin/refund/:id — omit amountCents for a full refund
+export const RefundSchema = z.object({
+  amountCents: z.number().int().min(1).optional(),
+  reason: z.enum(["requested_by_customer", "duplicate", "fraudulent"]).optional().default("requested_by_customer"),
 });
 
 // POST /payments/admin/create-invoice
 export const InvoiceCreateSchema = z.object({
-  taskRequestId: z.string().optional().nullable(),
-  clientEmail: email,
+  taskRequestId: z.string().regex(/^[a-f\d]{24}$/i, "taskRequestId is required"),
+  clientEmail: email.optional(),
   clientName: optStr,
-  amountUSD: z.number().min(1, "Amount must be between $1 and $999,999").max(999999, "Amount must be between $1 and $999,999"),
+  // Integer cents (lib/money.ts): $1.00 – $999,999.00
+  amountCents: z.number().int("Amount must be whole cents").min(100, "Amount must be at least $1.00").max(99_999_900, "Amount must be at most $999,999.00"),
+  currency: z.enum(["usd"]).optional().default("usd"),
+  expiresInDays: z.number().int().min(1).max(90).optional().default(14),
   description: shortStr("Description"),
 });

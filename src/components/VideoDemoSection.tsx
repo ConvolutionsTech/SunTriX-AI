@@ -19,7 +19,7 @@ const VideoDemoSection = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiRequest<any[]>(ENDPOINTS.PORTFOLIO).then(({ data }) => {
+    apiRequest<any[]>(ENDPOINTS.PORTFOLIO_LIST).then(({ data }) => {
       if (data) {
         const filtered = data
           .filter(p => p.status === "published" && p.featured && p.videoUrl)

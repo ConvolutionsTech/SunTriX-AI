@@ -5,6 +5,7 @@ import { apiRequest, ENDPOINTS } from "../lib/api";
 import { useSEO } from "../hooks/useSEO";
 import Layout from "../components/Layout";
 import { Clock, Tag, ArrowLeft, Calendar, User, ChevronRight, Share2, Copy, Check, FileText, Download, Eye } from "lucide-react";
+import { safeHref, sanitizeHtml } from "@/lib/sanitize";
 
 interface BlogPost {
   _id: string;
@@ -38,7 +39,8 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
-// Minimal markdown → HTML renderer (no external deps)
+// Minimal markdown → HTML renderer. Its output (and any stored HTML) is untrusted —
+// always pass it through sanitizeHtml before rendering.
 const renderMarkdown = (md: string): string => {
   if (!md) return "";
   // If the content is already HTML (from Quill), return it directly
@@ -230,7 +232,7 @@ const BlogDetail = () => {
               prose-blockquote:border-primary prose-blockquote:text-muted-foreground
               prose-strong:text-foreground
               prose-li:text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(post.content)) }}
           />
 
           {/* Document Assets (Downloads) */}
@@ -242,7 +244,7 @@ const BlogDetail = () => {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {documentMedia.map((media, i) => (
-                  <a key={i} href={media.url} target="_blank" rel="noopener noreferrer" 
+                  <a key={i} href={safeHref(media.url)} target="_blank" rel="noopener noreferrer" 
                      className="flex items-center gap-4 p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 group">
                     <div className="p-3.5 bg-primary/10 text-primary rounded-xl group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300">
                       <Download className="w-5 h-5" />

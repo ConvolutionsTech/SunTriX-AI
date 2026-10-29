@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { safeHref } from "@/lib/sanitize";
 
 interface Client {
   _id: string;
@@ -58,7 +59,7 @@ const SocialProofBar = () => {
             );
 
             return client.websiteUrl ? (
-              <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" key={i}>
+              <a href={safeHref(client.websiteUrl)} target="_blank" rel="noopener noreferrer" key={i}>
                 {content}
               </a>
             ) : (

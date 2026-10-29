@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { ENDPOINTS, apiRequest } from "@/lib/api";
 import { AdminStatusBadge } from "./AdminStatusBadge";
+import { ProposalEditor } from "./ProposalEditor";
+import AdminProjectHub from "./AdminProjectHub";
 import {
   User, Mail, Phone, Building, Briefcase, Calendar, DollarSign,
   FileText, Lock, CreditCard, Sparkles, CheckCircle2, Clock,
@@ -24,7 +26,7 @@ interface TaskRequestItem {
   contractToken?: string;
   contractSignedAt?: string;
   trackingToken?: string;
-  statusHistory?: Array<{ status: string; timestamp: string; note?: string }>;
+  statusHistory?: Array<{ status: string; updatedAt?: string; note?: string }>;
   createdAt: string;
 }
 
@@ -35,27 +37,19 @@ interface EngagementCommandCenterProps {
   onRefresh: () => void;
 }
 
+// Backend task statuses, in lifecycle order (cancelled is shown by the badge)
 const STAGES = [
-  { id: "submitted", label: "Request" },
-  { id: "reviewing", label: "Review" },
+  { id: "new", label: "Request" },
+  { id: "in_review", label: "Review" },
   { id: "proposal_sent", label: "Proposal" },
   { id: "contract_sent", label: "Contract" },
-  { id: "accepted", label: "Payment" },
+  { id: "contract_signed", label: "Signed" },
   { id: "in_progress", label: "Project" },
   { id: "completed", label: "Complete" },
 ];
 
-function getStageIndex(status: string): number {
-  const norm = (status || "submitted").toLowerCase();
-  if (norm === "submitted") return 0;
-  if (norm === "reviewing") return 1;
-  if (norm === "proposal_sent") return 2;
-  if (norm === "contract_sent") return 3;
-  if (norm === "accepted" || norm === "signed") return 4;
-  if (norm === "in_progress") return 5;
-  if (norm === "completed") return 6;
-  return 0;
-}
+const getStageIndex = (status: string) => Math.max(0, STAGES.findIndex((s) => s.id === status));
+const isClosed = (status: string) => status === "completed" || status === "cancelled";
 
 export const EngagementCommandCenter = ({
   request,
@@ -64,7 +58,6 @@ export const EngagementCommandCenter = ({
   onRefresh,
 }: EngagementCommandCenterProps) => {
   const [activeTab, setActiveTab] = useState<"overview" | "proposal" | "contract" | "finance" | "project">("overview");
-  const [proposalData, setProposalData] = useState<any>(null);
   const [contractData, setContractData] = useState<any>(null);
   const [trackerData, setTrackerData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -79,32 +72,34 @@ export const EngagementCommandCenter = ({
   const fetchRelatedData = async () => {
     if (!request) return;
     setLoading(true);
-    if (request.proposalId) {
-      const { data } = await apiRequest<any>(ENDPOINTS.PROPOSAL_ADMIN_BY_TASK(request._id));
-      if (data) setProposalData(data);
-    }
-    if (request.contractToken) {
-      const { data } = await apiRequest<any>(ENDPOINTS.CONTRACT_ADMIN_BY_TASK(request._id));
-      if (data) setContractData(data);
-    }
-    const { data: tracker } = await apiRequest<any>(ENDPOINTS.TRACKER_ADMIN_LIST);
-    if (tracker && Array.isArray(tracker)) {
-      const match = tracker.find((t: any) => t.taskRequestId === request._id || t.taskRequestId?._id === request._id);
-      if (match) setTrackerData(match);
-    }
+    const [contracts, trackers] = await Promise.all([
+      apiRequest<{ contracts: any[] }>(ENDPOINTS.CONTRACT_ADMIN_BY_TASK(request._id)),
+      apiRequest<{ trackers: any[] }>(ENDPOINTS.TRACKER_ADMIN_FOR_TASK(request._id)),
+    ]);
+    setContractData(contracts.data?.contracts?.[0] ?? null);
+    setTrackerData(trackers.data?.trackers?.[0] ?? null);
     setLoading(false);
   };
 
-  const handleAdvanceStage = async (nextStatus: string) => {
+  const handleAdvanceStage = async (nextStatus: string, note = "", force = false) => {
     if (!request) return;
     setActionLoading(true);
-    await apiRequest(ENDPOINTS.TASK_REQUEST_UPDATE_STATUS(request._id), {
-      method: "PATCH",
-      body: { status: nextStatus },
+    const { error, status } = await apiRequest(ENDPOINTS.TASK_REQUEST_UPDATE_STATUS(request._id), {
+      method: "PUT",
+      body: { status: nextStatus, note, ...(force && { force: true }) },
     });
     setActionLoading(false);
+    // A paid invoice blocks cancellation unless the admin confirms (refunds are handled in Payments)
+    if (error && status === 409 && nextStatus === "cancelled" && !force) {
+      if (window.confirm(`${error}\n\nCancel anyway without refunding?`)) return handleAdvanceStage(nextStatus, note, true);
+    } else if (error) window.alert(error);
     onRefresh();
     fetchRelatedData();
+  };
+
+  const handleCancel = () => {
+    const reason = window.prompt("Cancel this engagement? Add a short reason for the record:");
+    if (reason !== null) handleAdvanceStage("cancelled", reason || "Cancelled by admin");
   };
 
   if (!isOpen || !request) return null;
@@ -132,21 +127,30 @@ export const EngagementCommandCenter = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {currentStageIdx === 0 && (
+              {request.status === "new" && (
                 <button
-                  onClick={() => handleAdvanceStage("reviewing")}
+                  onClick={() => handleAdvanceStage("in_review")}
                   disabled={actionLoading}
                   className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-xs hover:bg-primary/90 transition-all"
                 >
                   Mark In Review
                 </button>
               )}
-              {currentStageIdx === 1 && (
+              {request.status === "in_review" && (
                 <button
                   onClick={() => setActiveTab("proposal")}
                   className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-xs hover:bg-primary/90 transition-all flex items-center gap-1.5"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Draft AI Proposal
+                  <Sparkles className="h-3.5 w-3.5" /> Prepare Proposal
+                </button>
+              )}
+              {!isClosed(request.status) && (
+                <button
+                  onClick={handleCancel}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-all"
+                >
+                  Cancel engagement
                 </button>
               )}
               <button
@@ -293,32 +297,15 @@ export const EngagementCommandCenter = ({
                 </div>
               </div>
 
-              {proposalData ? (
-                <div className="space-y-3 text-xs">
-                  <div className="p-4 rounded-xl border border-border/60 bg-card space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">{proposalData.title}</span>
-                      <AdminStatusBadge status={proposalData.status} size="sm" />
-                    </div>
-                    <p className="text-muted-foreground">{proposalData.executiveSummary}</p>
-                    <div className="pt-2 flex justify-between items-center text-[11px] font-mono text-muted-foreground">
-                      <span>Value: ${proposalData.totalAmount}</span>
-                      <span>Expires: {new Date(proposalData.expiresAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-8 text-center space-y-2">
-                  <p className="text-xs text-muted-foreground">No proposal drafted yet for this engagement.</p>
-                  <button
-                    onClick={() => handleAdvanceStage("proposal_sent")}
-                    disabled={actionLoading}
-                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-xs"
-                  >
-                    Generate AI Proposal
-                  </button>
-                </div>
-              )}
+              <ProposalEditor
+                taskId={request._id}
+                clientEmail={request.email}
+                clientName={request.name}
+                onChanged={() => {
+                  onRefresh();
+                  fetchRelatedData();
+                }}
+              />
             </div>
           )}
 
@@ -369,13 +356,11 @@ export const EngagementCommandCenter = ({
                 <p className="text-xs text-muted-foreground">Development phases, deliverables, and client updates</p>
               </div>
 
-              {trackerData ? (
-                <div className="space-y-3 text-xs">
-                  <p className="font-semibold text-foreground">Current Phase: {trackerData.currentPhase}</p>
-                </div>
+              {["contract_signed", "in_progress", "completed"].includes(request.status) || trackerData ? (
+                <AdminProjectHub taskId={request._id} />
               ) : (
                 <div className="py-8 text-center space-y-2">
-                  <p className="text-xs text-muted-foreground">Project tracker activates upon signed contract.</p>
+                  <p className="text-xs text-muted-foreground">Project tracker activates once the contract is signed.</p>
                 </div>
               )}
             </div>
