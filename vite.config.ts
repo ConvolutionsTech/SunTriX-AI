@@ -7,11 +7,8 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
+    // The backend allows localhost:8080 (and 5173/3000) outside production — see backend/src/lib/cors.ts
     port: 8080,
-    allowedHosts: "all",
-    hmr: {
-      overlay: false,
-    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   build: {
