@@ -58,6 +58,8 @@ const ContractSchema = new Schema<IContract>(
 );
 
 ContractSchema.index({ taskRequestId: 1 });
+// Exactly one contract per proposal, even under concurrent or repeated accepts
+ContractSchema.index({ proposalId: 1 }, { unique: true });
 ContractSchema.index({ clientEmail: 1 });
 
 export default mongoose.model<IContract>("Contract", ContractSchema);

@@ -4,10 +4,15 @@ import { contractRepository, ContractRepository } from "../contracts/contract.re
 import { taskRequestService, TaskRequestService } from "../task-requests/task-request.service";
 import { AppError, ERROR_CODES } from "../../shared/errors/appError";
 import { CreateProposalDTO, IProposal } from "./proposal.types";
+import { ProposalStatus } from "../../models/Proposal";
 import { getSetting } from "../../lib/configLoader";
 import TaskRequest from "../../models/TaskRequest";
 import { draftProposalWithAI, generateContractWithAI } from "../../services/groq";
 import { sendProposalEmail, sendChangesRequestedNotification, sendContractEmail } from "../../services/email";
+
+const SENDABLE: ProposalStatus[] = ["draft", "changes_requested", "expired"];
+const PROPOSAL_TTL_DAYS = 14;
+const CONTRACT_TTL_DAYS = 14;
 
 export class ProposalService {
   constructor(
@@ -68,12 +73,28 @@ export class ProposalService {
     return proposal;
   }
 
+  /**
+   * Sends (or re-sends) a proposal. The task moves first, so a task that can't
+   * receive a proposal (e.g. cancelled, already contracted) leaves the proposal
+   * untouched; the proposal itself only flips from draft/changes_requested/expired.
+   */
   async sendProposal(id: string): Promise<IProposal> {
     const proposal = await this.getById(id);
-    const updated = await this.proposalRepo.updateStatus(id, "sent");
-    if (!updated) throw new AppError("Failed to update proposal status", ERROR_CODES.INTERNAL_SERVER_ERROR);
+    if (!SENDABLE.includes(proposal.status)) {
+      throw new AppError(`A ${proposal.status} proposal can't be sent.`, ERROR_CODES.CONFLICT);
+    }
 
-    await this.taskService.transitionStatus(proposal.taskRequestId.toString(), "proposal_sent", "admin");
+    const taskId = proposal.taskRequestId.toString();
+    const task = await this.taskService.getTaskById(taskId);
+    if (task.status === "new") await this.taskService.transitionStatus(taskId, "in_review", "admin", "Proposal prepared");
+    await this.taskService.transitionStatus(taskId, "proposal_sent", "admin");
+
+    const expiresAt = new Date(Date.now() + PROPOSAL_TTL_DAYS * 86400000);
+    const updated = await this.proposalRepo.transition({ _id: id }, SENDABLE, { status: "sent", expiresAt });
+    if (!updated) {
+      await this.taskService.transitionStatus(taskId, "in_review", "admin", "Proposal send aborted").catch(() => {});
+      throw new AppError("The proposal was changed by someone else — reload and try again.", ERROR_CODES.CONFLICT);
+    }
 
     const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
     const proposalUrl = `${appUrl}/proposal/${proposal.proposalToken}`;
@@ -85,100 +106,117 @@ export class ProposalService {
       totalAmount: `$${(proposal.totalAmount / 100).toFixed(2)}`,
       milestones: (proposal.milestones || []).map((m: any) => ({ title: m.title, amount: `$${(m.amount / 100).toFixed(2)}` })),
       proposalUrl,
-      expiresAt: proposal.expiresAt ? proposal.expiresAt.toISOString() : "",
+      expiresAt: expiresAt.toISOString(),
     });
 
     return updated;
   }
 
+  /**
+   * Client accepts: claims the proposal atomically, generates exactly one
+   * contract, moves the task to contract_sent. Any failure removes the contract
+   * created here and restores the proposal's previous status.
+   */
   async acceptProposal(token: string): Promise<{ proposal: IProposal; contractToken: string }> {
-    const claimed = await this.proposalRepo.atomicClaimForAcceptance(token);
-    if (!claimed) {
-      const existing = await this.proposalRepo.findByToken(token);
-      if (existing && (existing.status === "accepted" || existing.status === "processing")) {
-        let contractToken = (existing as any).contractToken;
-        if (!contractToken) {
-          const linkedContract = await this.contractRepo.findByToken(`contract_${existing.proposalToken}`);
-          if (linkedContract) contractToken = linkedContract.contractToken;
-        }
-        return { proposal: existing, contractToken: contractToken || "" };
-      }
-      throw new AppError("Proposal is not available for acceptance.", ERROR_CODES.CONFLICT);
+    const current = await this.proposalRepo.findByToken(token);
+    if (!current) throw new AppError("Proposal not found", ERROR_CODES.NOT_FOUND);
+    if (current.status === "accepted" && current.contractToken) {
+      return { proposal: current, contractToken: current.contractToken }; // repeat click / refresh
+    }
+    if (current.status === "processing") {
+      throw new AppError("This proposal is being accepted — please wait a moment and refresh.", ERROR_CODES.CONFLICT);
+    }
+    if (current.expiresAt && current.expiresAt <= new Date()) {
+      throw new AppError("This proposal has expired. Please ask us for an updated proposal.", 410);
+    }
+    const taskStatus = (current.taskRequestId as any)?.status;
+    if (taskStatus !== "proposal_sent") {
+      throw Object.assign(new AppError("This proposal is no longer open for acceptance.", ERROR_CODES.CONFLICT), { code: "TASK_NOT_ACCEPTING" });
     }
 
+    const previous = await this.proposalRepo.atomicClaimForAcceptance(token);
+    if (!previous) throw new AppError("Proposal is not available for acceptance.", ERROR_CODES.CONFLICT);
+
+    let contractId: unknown = null;
     try {
       const contractToken = `contract_${crypto.randomBytes(16).toString("hex")}`;
       const brandName = getSetting("BRAND_NAME", "SunTriX AI Solutions");
       const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
+      const taskReq = previous.taskRequestId as any;
+      const taskId = (taskReq?._id || previous.taskRequestId).toString();
 
-      const taskReq = claimed.taskRequestId as any;
       const fullContractText = await generateContractWithAI({
         brandName,
-        clientName: claimed.clientName || taskReq?.name || "Client",
-        clientEmail: claimed.clientEmail,
-        projectTitle: claimed.title,
-        scopeItems: claimed.scopeItems || [],
-        timeline: claimed.timeline || "As specified in project roadmap",
-        milestones: (claimed.milestones || []).map((m: any) => ({ title: m.title, amount: `$${(m.amount / 100).toFixed(2)}`, dueWeek: m.dueWeek || 1 })),
-        totalAmount: `$${(claimed.totalAmount / 100).toFixed(2)}`,
-        terms: claimed.paymentTerms || "50% upfront deposit upon signing",
+        clientName: previous.clientName || taskReq?.name || "Client",
+        clientEmail: previous.clientEmail,
+        projectTitle: previous.title,
+        scopeItems: previous.scopeItems || [],
+        timeline: previous.timeline || "As specified in project roadmap",
+        milestones: (previous.milestones || []).map((m: any) => ({ title: m.title, amount: `$${(m.amount / 100).toFixed(2)}`, dueWeek: m.dueWeek || 1 })),
+        totalAmount: `$${(previous.totalAmount / 100).toFixed(2)}`,
+        terms: previous.paymentTerms || "50% upfront deposit upon signing",
         techStack: taskReq?.techStack || "",
       });
 
-      await this.contractRepo.create({
+      const contractExpiresAt = new Date(Date.now() + CONTRACT_TTL_DAYS * 86400000);
+      const contract = await this.contractRepo.create({
         contractToken,
-        proposalId: claimed._id,
-        taskRequestId: claimed.taskRequestId._id || claimed.taskRequestId,
-        clientName: claimed.clientName || taskReq?.name || "Client",
-        clientEmail: claimed.clientEmail,
-        projectTitle: claimed.title,
+        proposalId: previous._id,
+        taskRequestId: taskId,
+        clientName: previous.clientName || taskReq?.name || "Client",
+        clientEmail: previous.clientEmail,
+        projectTitle: previous.title,
         fullContractText,
-        totalAmount: claimed.totalAmount,
-        currency: claimed.currency || "USD",
+        totalAmount: previous.totalAmount,
+        currency: previous.currency || "usd",
         status: "pending",
-        expiresAt: new Date(Date.now() + 14 * 86400000),
+        expiresAt: contractExpiresAt,
       });
+      contractId = contract._id;
 
-      const updated = await this.proposalRepo.updateStatus(claimed._id.toString(), "accepted", {
-        acceptedAt: new Date(),
-        contractToken,
-      });
+      await this.taskService.transitionStatus(taskId, "contract_sent", "system");
+      const updated = await this.proposalRepo.updateStatus(previous._id.toString(), "accepted", { acceptedAt: new Date(), contractToken });
 
-      await this.taskService.transitionStatus((claimed.taskRequestId._id || claimed.taskRequestId).toString(), "contract_sent", "system");
-
-      const contractUrl = `${appUrl}/contract/${contractToken}`;
       await sendContractEmail({
-        clientName: claimed.clientName || "Valued Client",
-        clientEmail: claimed.clientEmail,
-        projectTitle: claimed.title,
-        totalAmount: `$${(claimed.totalAmount / 100).toFixed(2)}`,
-        contractUrl,
-        expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+        clientName: previous.clientName || "Valued Client",
+        clientEmail: previous.clientEmail,
+        projectTitle: previous.title,
+        totalAmount: `$${(previous.totalAmount / 100).toFixed(2)}`,
+        contractUrl: `${appUrl}/contract/${contractToken}`,
+        expiresAt: contractExpiresAt.toISOString(),
       });
 
       return { proposal: updated!, contractToken };
     } catch (err) {
-      await this.proposalRepo.updateStatus(claimed._id.toString(), "sent");
+      if (contractId) await this.contractRepo.deleteById(contractId).catch(() => {});
+      await this.proposalRepo.updateStatus(previous._id.toString(), previous.status);
       throw err;
     }
   }
 
-  async requestChanges(token: string, notes: string): Promise<IProposal> {
-    const proposal = await this.getByToken(token);
-    const updated = await this.proposalRepo.updateStatus(proposal._id.toString(), "changes_requested", {
-      $push: { clientNotes: { note: notes, date: new Date() } },
-    });
+  /** Client asks for changes to a sent proposal; the request goes back to review. */
+  async requestChanges(token: string, clientNote: string): Promise<IProposal> {
+    const updated = await this.proposalRepo.transition(
+      { proposalToken: token, expiresAt: { $gt: new Date() } },
+      ["sent"],
+      { status: "changes_requested", clientNote }
+    );
+    if (!updated) throw new AppError("This proposal can't be changed any more.", ERROR_CODES.CONFLICT);
+
+    await this.taskService
+      .transitionStatus(updated.taskRequestId.toString(), "in_review", "client", "Client requested changes to the proposal")
+      .catch((err) => console.error("Could not move request back to review:", err.message));
 
     const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
     await sendChangesRequestedNotification({
-      projectTitle: proposal.title,
-      clientName: proposal.clientName || "Client",
-      clientEmail: proposal.clientEmail,
-      clientNote: notes,
+      projectTitle: updated.title,
+      clientName: updated.clientName || "Client",
+      clientEmail: updated.clientEmail,
+      clientNote,
       adminUrl: `${appUrl}/admin/tasks`,
     });
 
-    return updated!;
+    return updated;
   }
 }
 

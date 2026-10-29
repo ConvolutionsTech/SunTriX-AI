@@ -74,7 +74,7 @@ router.post("/accept/:token", async (req: Request, res: Response, next: NextFunc
 // POST /proposals/request-changes/:token — PUBLIC client requests changes
 router.post("/request-changes/:token", validate(ProposalRequestChangesSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const proposal = await proposalService.requestChanges(req.params.token, req.body.notes);
+    const proposal = await proposalService.requestChanges(req.params.token, req.body.clientNote);
     res.json({ message: "Change request submitted. Our team will review and update the proposal.", proposal });
   } catch (err) {
     next(err);

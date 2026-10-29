@@ -2,9 +2,35 @@ import cron from "node-cron";
 import Post from "../models/Post";
 import Portfolio from "../models/Portfolio";
 import AuditLog from "../models/AuditLog";
+import Proposal from "../models/Proposal";
+import Contract from "../models/Contract";
 import { getSetting } from "./configLoader";
 
+const STALE_PROCESSING_MS = 10 * 60 * 1000;
+
+/**
+ * Proposals and contracts past their expiry stop being actionable, and an
+ * acceptance left in "processing" by a crash is released so the client can retry.
+ */
+export async function expireLifecycleDocuments(now = new Date()): Promise<void> {
+  const proposals = await Proposal.updateMany({ status: { $in: ["sent", "changes_requested"] }, expiresAt: { $lt: now } }, { $set: { status: "expired" } });
+  const contracts = await Contract.updateMany({ status: "pending", expiresAt: { $lt: now } }, { $set: { status: "expired" } });
+  const stuck = await Proposal.updateMany(
+    { status: "processing", updatedAt: { $lt: new Date(now.getTime() - STALE_PROCESSING_MS) } },
+    { $set: { status: "sent" } }
+  );
+  const total = proposals.modifiedCount + contracts.modifiedCount + stuck.modifiedCount;
+  if (total > 0) {
+    console.log(`[Scheduler] Expired ${proposals.modifiedCount} proposal(s), ${contracts.modifiedCount} contract(s); released ${stuck.modifiedCount} stuck acceptance(s)`);
+  }
+}
+
 export function startScheduler(): void {
+  // ── Every 5 minutes: expire proposals/contracts, release stuck acceptances ─
+  cron.schedule("*/5 * * * *", () => {
+    expireLifecycleDocuments().catch((err) => console.error("[Scheduler] Error during lifecycle expiry:", err));
+  });
+
   // ── Every 5 minutes: auto-publish scheduled content ────────────
   cron.schedule("*/5 * * * *", async () => {
     const now = new Date();
