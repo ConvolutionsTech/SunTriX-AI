@@ -107,9 +107,9 @@ const MAINTENANCE_BYPASS_PREFIXES = [
   "/v1/proposals",
   "/v1/contracts",
   "/v1/payments/invoice",
-  "/v1/payments/verify",
   "/v1/payments/webhook",
   "/v1/newsletter/confirm",
+  "/v1/newsletter/unsubscribe",
 ];
 app.use((req, res, next) => {
   if (getSetting("MAINTENANCE_MODE", "false") !== "true") return next();
@@ -127,6 +127,7 @@ app.use((req, res, next) => {
   }
   res.status(503).json({
     error: "Service Temporarily Unavailable",
+    code: "MAINTENANCE",
     message: "The platform is undergoing scheduled maintenance. Please check back shortly.",
     maintenanceMode: true,
   });
