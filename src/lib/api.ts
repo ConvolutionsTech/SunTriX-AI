@@ -200,7 +200,7 @@ export const ENDPOINTS = {
   UPLOAD_BULK_DELETE: `${BASE_URL}/upload/bulk`,
 
   // Payments (Stripe)
-  PAYMENT_VERIFY: (sessionId: string) => `${BASE_URL}/payments/verify/${sessionId}`,
+  PAYMENT_INVOICE_CHECKOUT: (token: string) => `${BASE_URL}/payments/invoice/${token}/checkout`,
   PAYMENT_INVOICE: (token: string) => `${BASE_URL}/payments/invoice/${token}`,
   PAYMENT_ADMIN_LIST: `${BASE_URL}/payments/admin/list`,
   PAYMENT_ADMIN_STATS: `${BASE_URL}/payments/admin/stats`,

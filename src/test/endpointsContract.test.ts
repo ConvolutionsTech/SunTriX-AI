@@ -35,7 +35,6 @@ const toPattern = (route: string) =>
 // Entries with no backend route yet, each scheduled in PRODUCTION_PLAN.md. The
 // test fails once one exists, so the list can only shrink.
 const KNOWN_MISSING = new Set<string>([
-  "PAYMENT_VERIFY", // T-FE-4
   "PAYMENT_ADMIN_LIST", // T-FE-5
   "PAYMENT_ADMIN_STATS", // T-FE-5
   "PAYMENT_ADMIN_REFUND", // T-LC-6
