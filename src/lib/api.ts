@@ -1,14 +1,11 @@
 /**
- * Centralized API Endpoints
- * 
- * All backend endpoints are defined here. When migrating to Node.js + MongoDB,
- * simply update the BASE_URL and endpoint paths. All components import from this file.
- * 
- * MIGRATION GUIDE:
- * 1. Set BASE_URL to your backend (e.g., "https://api.suntrix.com/v1")
- * 2. Replace localStorage store calls with apiRequest() calls
- * 3. Update Cloudinary endpoints for asset uploads
- * 4. Set GROK_API_KEY in your backend environment for chatbot
+ * The single source of backend endpoints (ENDPOINTS) and the apiRequest()
+ * helper, which returns { data, error, status } instead of throwing.
+ *
+ * - BASE_URL comes from VITE_API_URL (defaults to the local API).
+ * - The admin session token is attached only on /admin pages or with { auth: true }
+ *   (the API treats any Bearer header as "show drafts"); AuthManager owns the session.
+ * - AI features (chat, drafting) go through the backend, which calls Groq.
  */
 
 // Backend URL — reads from VITE_API_URL env var in production, falls back to local dev
@@ -77,7 +74,6 @@ export const ENDPOINTS = {
   // Auth
   AUTH_LOGIN: `${BASE_URL}/auth/login`,
   AUTH_LOGOUT: `${BASE_URL}/auth/logout`,
-  AUTH_ME: `${BASE_URL}/auth/me`,
   AUTH_REFRESH: `${BASE_URL}/auth/refresh`,
   AUTH_PASSWORD: `${BASE_URL}/auth/password`,
   AUTH_FORGOT: `${BASE_URL}/auth/forgot`,
@@ -89,9 +85,7 @@ export const ENDPOINTS = {
   TASK_REQUEST_SUBMIT: `${BASE_URL}/task-requests`,
   TASK_REQUEST_LIST: `${BASE_URL}/task-requests`,
   TASK_REQUEST_BY_ID: (id: string) => `${BASE_URL}/task-requests/${id}`,
-  TASK_REQUEST_UPDATE: (id: string) => `${BASE_URL}/task-requests/${id}`,
   TASK_REQUEST_UPDATE_STATUS: (id: string) => `${BASE_URL}/task-requests/${id}/status`,
-  TASK_REQUEST_BULK_DELETE: `${BASE_URL}/task-requests/bulk`,
   TASK_REQUEST_TRACK: (token: string) => `${BASE_URL}/task-requests/track/${token}`,
 
   // AI Chatbot (proxied through backend → Grok API)
@@ -100,22 +94,15 @@ export const ENDPOINTS = {
 
   // Portfolio & Case Studies
   PORTFOLIO_LIST: `${BASE_URL}/portfolio`,
-  PORTFOLIO_BY_ID: (id: string) => `${BASE_URL}/portfolio/${id}`,
   PORTFOLIO_BY_SLUG: (slug: string) => `${BASE_URL}/portfolio/slug/${slug}`,
   PORTFOLIO_CREATE: `${BASE_URL}/portfolio`,
   PORTFOLIO_UPDATE: (id: string) => `${BASE_URL}/portfolio/${id}`,
   PORTFOLIO_DELETE: (id: string) => `${BASE_URL}/portfolio/${id}`,
   PORTFOLIO_REORDER: `${BASE_URL}/portfolio/reorder`,
 
-  CASE_STUDY_LIST: `${BASE_URL}/case-studies`,
-  CASE_STUDY_BY_SLUG: (slug: string) => `${BASE_URL}/case-studies/slug/${slug}`,
-  CASE_STUDY_CREATE: `${BASE_URL}/case-studies`,
-  CASE_STUDY_UPDATE: (id: string) => `${BASE_URL}/case-studies/${id}`,
-  CASE_STUDY_DELETE: (id: string) => `${BASE_URL}/case-studies/${id}`,
 
   // Testimonials
   TESTIMONIALS_LIST: `${BASE_URL}/testimonials`,
-  TESTIMONIALS_CREATE: `${BASE_URL}/testimonials`,
   TESTIMONIALS_UPDATE: (id: string) => `${BASE_URL}/testimonials/${id}`,
   TESTIMONIALS_DELETE: (id: string) => `${BASE_URL}/testimonials/${id}`,
 
@@ -125,15 +112,12 @@ export const ENDPOINTS = {
   NEWSLETTER_UNSUBSCRIBE: (token: string) => `${BASE_URL}/newsletter/unsubscribe/${token}`,
   NEWSLETTER_LIST: `${BASE_URL}/newsletter`,
   NEWSLETTER_BROADCAST: `${BASE_URL}/newsletter/broadcast`,
-  NEWSLETTER_GENERATE: `${BASE_URL}/newsletter/generate-template`,
 
   // CMS Content
   CMS_ANNOUNCEMENT: `${BASE_URL}/cms/announcement`,
   CMS_HERO: `${BASE_URL}/cms/hero`,
   CMS_COMPANY: `${BASE_URL}/cms/company`,
   CMS_SOCIAL_LINKS: `${BASE_URL}/cms/social-links`,
-  CMS_INTRO_VIDEO: `${BASE_URL}/cms/intro-video`,
-  CMS_SEO_BY_PAGE: (page: string) => `${BASE_URL}/cms/seo/${page}`,
 
   // Departments
   DEPARTMENTS_LIST: `${BASE_URL}/departments`,
@@ -149,7 +133,6 @@ export const ENDPOINTS = {
   ADMIN_AI_USAGE: (days = 7) => `${BASE_URL}/admin/ai-usage?days=${days}`,
   ADMIN_EMAIL_LOG: (status?: string) => `${BASE_URL}/admin/email-log${status ? `?status=${status}` : ""}`,
   ADMIN_EMAIL_RETRY: (id: string) => `${BASE_URL}/admin/email-log/${id}/retry`,
-  ADMIN_TASKS: `${BASE_URL}/task-requests`,
   ADMIN_CONTACTS: `${BASE_URL}/contact`,
   ADMIN_USERS: `${BASE_URL}/admin/users`,
   ADMIN_USER: (id: string) => `${BASE_URL}/admin/users/${id}`,
@@ -193,7 +176,6 @@ export const ENDPOINTS = {
   // Campaigns
   CAMPAIGN_LIST: `${BASE_URL}/newsletter/campaigns`,
   CAMPAIGN_RETRY: (id: string) => `${BASE_URL}/newsletter/admin/campaigns/${id}/retry`,
-  CAMPAIGN_CREATE: `${BASE_URL}/newsletter/campaigns`,
 
   // Assets (Cloudinary via backend)
   UPLOAD_IMAGE: `${BASE_URL}/upload/image`,
@@ -201,7 +183,6 @@ export const ENDPOINTS = {
   UPLOAD_DOCUMENT: `${BASE_URL}/upload/document`,
   UPLOAD_LIST: `${BASE_URL}/upload`,
   UPLOAD_DELETE: (assetId: string) => `${BASE_URL}/upload/${encodeURIComponent(assetId)}`,
-  UPLOAD_BULK_DELETE: `${BASE_URL}/upload/bulk`,
 
   // Payments (Stripe)
   PAYMENT_INVOICE_CHECKOUT: (token: string) => `${BASE_URL}/payments/invoice/${token}/checkout`,
@@ -228,7 +209,6 @@ export const ENDPOINTS = {
   // System Settings (Admin)
   SETTINGS_LIST:  `${BASE_URL}/settings`,
   SETTINGS_BULK:  `${BASE_URL}/settings/bulk`,
-  SETTINGS_UPDATE: (key: string) => `${BASE_URL}/settings/${key}`,
   SETTINGS_PUBLIC: `${BASE_URL}/settings/public`,
   SETTINGS_AI_MODELS: (refresh = false) => `${BASE_URL}/settings/ai/models${refresh ? "?refresh=true" : ""}`,
 

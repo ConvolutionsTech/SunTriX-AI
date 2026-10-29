@@ -18,7 +18,8 @@ export function useNotifications() {
   });
 
   const fetchNotifications = async () => {
-    if (!authManager.isAuthenticated()) return;
+    // Background tabs don't poll; the next visible tick catches up
+    if (!authManager.isAuthenticated() || document.hidden) return;
 
     try {
       const { data } = await apiRequest<NotificationsData>(ENDPOINTS.ADMIN_NOTIFICATIONS, { auth: true });
