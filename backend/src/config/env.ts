@@ -33,6 +33,13 @@ export const EnvSchema = z
     CLOUDINARY_API_KEY: z.string().min(1).optional(),
     CLOUDINARY_API_SECRET: z.string().min(1).optional(),
     TRUST_PROXY: z.string().optional(),
+    CORS_ORIGINS: z
+      .string()
+      .optional()
+      .refine(
+        (v) => !v || v.split(",").map((o) => o.trim()).filter(Boolean).every((o) => /^https?:\/\/[^/\s]+\/?$/.test(o)),
+        "CORS_ORIGINS must be a comma-separated list of origins like https://admin.example.com"
+      ),
   })
   .superRefine((env, ctx) => {
     if (env.JWT_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {

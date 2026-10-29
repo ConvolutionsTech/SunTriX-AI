@@ -24,7 +24,7 @@ import { logger } from "./logger";
 const ENV_ONLY_PREFIXES = ["JWT_", "STRIPE_", "CLOUDINARY_"];
 const ENV_ONLY_KEYS = new Set([
   "RESEND_API_KEY", "GROQ_API_KEY", "MONGODB_URI", "FRONTEND_URL", "NODE_ENV", "PORT", "TRUST_PROXY",
-  "LOG_LEVEL", "SENTRY_DSN", "METRICS_TOKEN", "GIT_SHA",
+  "LOG_LEVEL", "SENTRY_DSN", "METRICS_TOKEN", "GIT_SHA", "CORS_ORIGINS",
 ]);
 
 export function isEnvOnlySetting(key: string): boolean {

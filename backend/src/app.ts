@@ -7,6 +7,7 @@ import { logger, httpLogger } from "./lib/logger";
 import { initSentry } from "./lib/sentry";
 import { metricsMiddleware, metricsHandler } from "./lib/metrics";
 import { globalLimiter, authLimiter, chatLimiter } from "./middleware/rateLimiters";
+import { isAllowedOrigin } from "./lib/cors";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
 import { validateEnv } from "./config/env";
@@ -58,17 +59,12 @@ app.use(metricsMiddleware());
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // ─── CORS ────────────────────────────────────────────────────────
-const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173",
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
-
+// FRONTEND_URL + CORS_ORIGINS; localhost dev servers only outside production (lib/cors.ts).
+// A disallowed browser origin gets a 403 before any handler runs.
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
       callback(new AppError(`CORS: origin ${origin} not allowed`, 403, "CORS"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

@@ -13,7 +13,7 @@ SunTriX AI is an agency website + admin CMS + client engagement platform. Two in
 
 Frontend (run from repo root):
 ```bash
-npm run dev            # Vite dev server on port 8080 (backend CORS only allows FRONTEND_URL + :5173/:3000 — set FRONTEND_URL accordingly)
+npm run dev            # Vite dev server on port 8080 (backend CORS allows FRONTEND_URL, CORS_ORIGINS and, outside production, localhost:8080/5173/3000)
 npm run build          # production build
 npm run lint           # eslint, 0 errors + capped warnings (--max-warnings); lower the cap when you remove `any`s
 npm run typecheck      # tsc for the app + strict check of src/lib (vite build does NOT type-check)
@@ -44,7 +44,7 @@ Notes:
 
 ## Backend architecture
 
-- **Entry `backend/src/app.ts`**: middleware order matters — helmet → CORS allowlist (`FRONTEND_URL` + localhost) → global rate limit → maintenance-mode gate (bypass list `MAINTENANCE_BYPASS_PREFIXES`) → **raw body for `/v1/payments/webhook` (must stay before `express.json`, for Stripe signature verification)** → JSON parsing → mongo-sanitize. All routes mounted under `/v1`. Per-route limiters: auth (login only), forms, chat. The server only starts when `NODE_ENV !== "test"`; `app` is exported for supertest.
+- **Entry `backend/src/app.ts`**: middleware order matters — helmet → CORS allowlist (`FRONTEND_URL` + `CORS_ORIGINS`; localhost only outside production) → global rate limit → maintenance-mode gate (bypass list `MAINTENANCE_BYPASS_PREFIXES`) → **raw body for `/v1/payments/webhook` (must stay before `express.json`, for Stripe signature verification)** → JSON parsing → mongo-sanitize. All routes mounted under `/v1`. Per-route limiters: auth (login only), forms, chat. The server only starts when `NODE_ENV !== "test"`; `app` is exported for supertest.
 - **Config** (`lib/configLoader.ts`): env-only keys (`isEnvOnlySetting`: `JWT_*`, `STRIPE_*`, `CLOUDINARY_*`, `RESEND_API_KEY`, `GROQ_API_KEY`, `MONGODB_URI`, `FRONTEND_URL`) come only from the environment. Everything an admin may change at runtime is declared in `config/settings.registry.ts` (section, type, default, zod schema); it is seeded into `SystemSetting`, cached per process, and edited via `/v1/settings` (admin only; unknown keys and invalid values are rejected). Precedence: DB → env → `getSetting` fallback, with empty values treated as unset. The cache is per process; a save bumps `SettingsVersion` and every instance reloads within ~15 s (scheduler poll; `GET /v1/settings/status` shows the loaded version). To add a runtime setting, add it to the registry — `settings.test.ts` fails if code reads a key that is in neither list.
 - **Layering** (newer core business flow uses a full layered structure; simpler CRUD resources are route + model only):
   - `routes/*.routes.ts` — Express routers; wrap handlers in try/catch → `next(err)`; use `requireAuth` (JWT, `middleware/auth.ts`) for admin endpoints — it also enforces roles: `viewer` is read-only (any write needs `admin`), unknown roles get 401; add `requireAdmin` for admin-only reads. `src/test/routePolicy.test.ts` walks the real route stack and checks every protected route; `validate(ZodSchema)` from `middleware/validate.ts`, and `logAudit(...)` for admin mutations.
