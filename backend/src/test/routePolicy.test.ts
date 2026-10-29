@@ -15,7 +15,7 @@ type Method = "get" | "post" | "put" | "patch" | "delete";
 interface RouteInfo { method: Method; path: string }
 
 const SAMPLE_ID = "507f1f77bcf86cd799439011";
-const ADMIN_ONLY_READS = new Set(["get /v1/settings", "get /v1/settings/status", "get /v1/admin/users", "get /v1/admin/email-log"]);
+const ADMIN_ONLY_READS = new Set(["get /v1/settings", "get /v1/settings/status", "get /v1/admin/users", "get /v1/admin/email-log", "get /v1/audit"]);
 const VIEWER_WRITE_ALLOWED = new Set(["post /v1/auth/logout", "post /v1/auth/password"]);
 
 function mountPath(layer: any): string {

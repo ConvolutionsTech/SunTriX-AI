@@ -40,10 +40,13 @@ router.post("/login", validate(LoginSchema), async (req: Request, res: Response,
     // Always run one bcrypt comparison so response time doesn't reveal which emails exist
     const isMatch = admin ? await admin.comparePassword(password) : await bcrypt.compare(password, TIMING_EQUALISER_HASH);
     if (!admin || !isMatch) {
+      // Not awaited: the response time must not depend on whether the email exists
+      void logAudit(req, "login_failed", "admin", admin ? String(admin._id) : "", String(email).toLowerCase().slice(0, 254), { ip: req.ip }, { id: admin ? String(admin._id) : "unknown", name: "(sign-in attempt)" });
       return next(createError("Invalid email or password", 401));
     }
 
     const tokens = await issueSession(admin);
+    void logAudit(req, "login", "admin", String(admin._id), admin.email, { ip: req.ip }, { id: String(admin._id), name: admin.name });
     res.json({ ...tokens, user: publicUser(admin) });
   } catch (err) {
     next(err);

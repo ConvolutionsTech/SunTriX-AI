@@ -117,7 +117,8 @@ router.get("/", requireAuth, async (_req: Request, res: Response, next: NextFunc
 // DELETE /newsletter/:id — admin remove subscriber
 router.delete("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await Newsletter.findByIdAndDelete(req.params.id);
+    const removed = await Newsletter.findByIdAndDelete(req.params.id);
+    if (removed) await logAudit(req, "delete", "subscriber", req.params.id, removed.email);
     res.json({ message: "Subscriber removed" });
   } catch (err) { next(err); }
 });

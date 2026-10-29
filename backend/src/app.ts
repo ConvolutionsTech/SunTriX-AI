@@ -8,6 +8,7 @@ import { initSentry } from "./lib/sentry";
 import { metricsMiddleware, metricsHandler } from "./lib/metrics";
 import { globalLimiter, authLimiter, chatLimiter } from "./middleware/rateLimiters";
 import { isAllowedOrigin } from "./lib/cors";
+import { auditWrites } from "./lib/audit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
 import { validateEnv } from "./config/env";
@@ -158,17 +159,25 @@ const V1 = "/v1";
 
 import trackerRoutes from "./routes/tracker.routes";
 
+// Audit trail for routers whose handlers don't call logAudit themselves (lib/audit.ts)
+const auditCaseStudies = auditWrites("case_study");
+const auditTestimonials = auditWrites("testimonial");
+const auditCms = auditWrites("cms", { withBody: true });
+const auditMedia = auditWrites("media", { action: (req) => (req.method === "POST" ? "upload" : req.method === "DELETE" ? "delete" : undefined) });
+// Tracker: admin actions only (client token routes have no user); chat messages aren't audited
+const auditTracker = auditWrites("tracker", { action: (req) => (req.path.endsWith("/chat") || req.method === "GET" ? undefined : "update") });
+
 app.use(`${V1}/auth`, authLimiter, authRoutes);
 app.use(`${V1}/portfolio`, portfolioRoutes);
-app.use(`${V1}/case-studies`, caseStudyRoutes);
-app.use(`${V1}/testimonials`, testimonialRoutes);
+app.use(`${V1}/case-studies`, auditCaseStudies, caseStudyRoutes);
+app.use(`${V1}/testimonials`, auditTestimonials, testimonialRoutes);
 app.use(`${V1}/task-requests`, taskRequestRoutes);
 app.use(`${V1}/contact`, contactRoutes);
 app.use(`${V1}/newsletter`, newsletterRoutes);
 app.use(`${V1}/chat`, chatLimiter, chatRoutes);
-app.use(`${V1}/cms`, cmsRoutes);
+app.use(`${V1}/cms`, auditCms, cmsRoutes);
 app.use(`${V1}/departments`, departmentRoutes);
-app.use(`${V1}/upload`, uploadRoutes);
+app.use(`${V1}/upload`, auditMedia, uploadRoutes);
 app.use(`${V1}/admin/users`, adminUserRoutes);
 app.use(`${V1}/admin`, adminRoutes);
 app.use(`${V1}/team`, teamRoutes);
@@ -181,7 +190,7 @@ app.use(`${V1}/payments`, paymentRoutes);
 app.use(`${V1}/settings`, settingsRoutes);
 app.use(`${V1}/proposals`, proposalRoutes);
 app.use(`${V1}/contracts`, contractRoutes);
-app.use(`${V1}/tracker`, trackerRoutes);
+app.use(`${V1}/tracker`, auditTracker, trackerRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────
 app.use((_req, res) => {
