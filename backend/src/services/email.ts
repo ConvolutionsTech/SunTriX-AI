@@ -362,20 +362,36 @@ export async function sendPaymentConfirmation(data: {
 }
 
 // ─── Newsletter broadcast ──────────────────────────────────────────────────
+export interface BroadcastRecipient {
+  email: string;
+  /** Public page that unsubscribes this recipient (one link per subscriber) */
+  unsubscribeUrl: string;
+}
+
+function withUnsubscribeFooter(htmlBody: string, unsubscribeUrl: string): string {
+  const url = escapeFields(unsubscribeUrl);
+  return `${htmlBody}
+<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center;">
+  You're receiving this because you subscribed to ${escapeFields(getBrandName())} updates.
+  <a href="${url}" style="color:#9ca3af;">Unsubscribe</a>
+</div>`;
+}
+
 export async function sendNewsletterBroadcast(
   subject: string,
   htmlBody: string,
-  recipients: string[]
+  recipients: BroadcastRecipient[]
 ): Promise<{ sentCount: number; error?: string }> {
   let sentCount = 0;
   if (!recipients.length) return { sentCount };
 
   const BATCH_SIZE = getBatchSize();
-  const emails = recipients.map((email) => ({
+  const emails = recipients.map((r) => ({
     from: getFromAddress(),
-    to: [email],
+    to: [r.email],
     subject,
-    html: htmlBody,
+    html: withUnsubscribeFooter(htmlBody, r.unsubscribeUrl),
+    headers: { "List-Unsubscribe": `<${r.unsubscribeUrl}>` },
   }));
 
   try {
@@ -383,21 +399,7 @@ export async function sendNewsletterBroadcast(
       const batch = emails.slice(i, i + BATCH_SIZE);
       const { error } = await getResend().batch.send(batch);
       if (error) {
-        if (
-          error.name === "validation_error" &&
-          error.message.includes("testing email address")
-        ) {
-          console.warn("[Newsletter] Resend in test mode — dispatching test broadcast copy to account owner (tahirsundhu8956@gmail.com)");
-          const testAddress = getSetting("ADMIN_NOTIFICATION_EMAIL", "tahirsundhu8956@gmail.com");
-          await getResend().emails.send({
-            from: getFromAddress(),
-            to: [testAddress],
-            subject: `[TEST BROADCAST] ${subject}`,
-            html: htmlBody,
-          }).catch((err: any) => console.error("Test broadcast error:", err));
-          sentCount += batch.length;
-          continue;
-        }
+        // Includes Resend test mode ("testing email address" restriction): nothing was delivered
         console.error("Resend Batch Error:", error);
         return { sentCount, error: error.message };
       }

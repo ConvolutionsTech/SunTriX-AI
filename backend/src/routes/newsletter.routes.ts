@@ -1,60 +1,50 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import Newsletter from "../models/Newsletter";
+import Newsletter, { newUnsubscribeToken } from "../models/Newsletter";
 import Campaign from "../models/Campaign";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 import { getSetting } from "../lib/configLoader";
-import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail } from "../services/email";
-import { validate, NewsletterSubscribeSchema } from "../middleware/validate";
+import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail, BroadcastRecipient } from "../services/email";
+import { validate, NewsletterSubscribeSchema, NewsletterBroadcastSchema } from "../middleware/validate";
 
 const router = Router();
 
-// POST /newsletter — public subscribe
+// POST /newsletter — public subscribe.
+// The response never reveals whether the address is already on the list, and an
+// address is only marked subscribed by its owner (confirmation click) when
+// double opt-in is on.
 router.post("/", validate(NewsletterSubscribeSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, interest } = req.body;
-    // Zod validate() enforces name/email/interest above; regex email check is redundant
-    const existing = await Newsletter.findOne({ email: email.toLowerCase() });
-    if (existing) {
-      existing.name = name;
-      existing.interest = interest;
-      existing.subscribed = true;
-      await existing.save();
-      return res.json({ message: "Subscription updated successfully" });
-    }
-
-    // Respect double opt-in setting
     const doubleOptIn = getSetting("NEWSLETTER_DOUBLE_OPTIN", "false") === "true";
+    const existing = await Newsletter.findOne({ email });
 
-    if (doubleOptIn) {
-      // Create subscriber as unconfirmed until they click the confirmation email link
-      const confirmToken = crypto.randomBytes(32).toString("hex");
-      const confirmTokenExpiry = new Date();
-      confirmTokenExpiry.setHours(confirmTokenExpiry.getHours() + 24); // 24-hour expiry
-
-      await Newsletter.create({
-        name,
-        email,
-        interest,
-        subscribed: false,
-        confirmToken,
-        confirmTokenExpiry
-      });
-
-      const frontendUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
-      const confirmUrl = `${frontendUrl}/newsletter/confirm/${confirmToken}`;
-
-      await sendNewsletterConfirmationEmail({ name, email, confirmUrl });
-
-      res.status(201).json({
-        message: "Please check your email to confirm your subscription.",
-        requiresConfirmation: true,
-      });
-    } else {
-      await Newsletter.create({ name, email, interest, subscribed: true });
-      res.status(201).json({ message: "Subscribed successfully" });
+    if (!doubleOptIn) {
+      if (existing) {
+        Object.assign(existing, { name, interest, subscribed: true });
+        await existing.save();
+      } else {
+        await Newsletter.create({ name, email, interest, subscribed: true });
+      }
+      return res.status(201).json({ message: "Subscribed successfully" });
     }
+
+    const pending = { message: "Please check your email to confirm your subscription.", requiresConfirmation: true };
+    if (existing?.subscribed) return res.status(201).json(pending);
+
+    const confirmToken = crypto.randomBytes(32).toString("hex");
+    const confirmTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (existing) {
+      Object.assign(existing, { name, interest, confirmToken, confirmTokenExpiry });
+      await existing.save();
+    } else {
+      await Newsletter.create({ name, email, interest, subscribed: false, confirmToken, confirmTokenExpiry });
+    }
+
+    const confirmUrl = `${getSetting("FRONTEND_URL", "http://localhost:5173")}/newsletter/confirm/${confirmToken}`;
+    await sendNewsletterConfirmationEmail({ name, email, confirmUrl });
+    res.status(201).json(pending);
   } catch (err) { next(err); }
 });
 
@@ -89,6 +79,21 @@ router.get("/confirm/:token", async (req: Request, res: Response, next: NextFunc
     res.json({ message: "Subscription confirmed! You will now receive our updates." });
   } catch (err) { next(err); }
 });
+
+// GET|POST /newsletter/unsubscribe/:token — public, no login (link in every campaign)
+const unsubscribe = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const subscriber = await Newsletter.findOneAndUpdate(
+      { unsubscribeToken: req.params.token },
+      { $set: { subscribed: false } },
+      { new: true }
+    );
+    if (!subscriber) return next(createError("This unsubscribe link is not valid.", 404));
+    res.json({ message: "You've been unsubscribed and won't receive further emails." });
+  } catch (err) { next(err); }
+};
+router.get("/unsubscribe/:token", unsubscribe);
+router.post("/unsubscribe/:token", unsubscribe);
 
 // GET /newsletter — admin subscribers list
 router.get("/", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
@@ -125,21 +130,31 @@ router.get("/campaigns", requireAuth, async (_req: Request, res: Response, next:
   } catch (err) { next(err); }
 });
 
+/** Recipients for an audience, in a stable order (so a retry can resume by count). */
+async function audienceRecipients(targetAudience: string): Promise<BroadcastRecipient[]> {
+  const query: Record<string, unknown> = { subscribed: true };
+  if (targetAudience && targetAudience !== "All") query.interest = targetAudience;
+  // Older subscribers predate unsubscribe tokens — give each one before sending
+  const missing = await Newsletter.find({ ...query, unsubscribeToken: { $exists: false } }).select("_id").lean();
+  if (missing.length) {
+    await Newsletter.bulkWrite(
+      missing.map((m) => ({
+        updateOne: { filter: { _id: m._id, unsubscribeToken: { $exists: false } }, update: { $set: { unsubscribeToken: newUnsubscribeToken() } } },
+      }))
+    );
+  }
+  const subscribers = await Newsletter.find(query).sort({ _id: 1 }).select("email unsubscribeToken").lean();
+
+  const frontendUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
+  return subscribers.map((s) => ({ email: s.email, unsubscribeUrl: `${frontendUrl}/newsletter/unsubscribe/${s.unsubscribeToken}` }));
+}
+
 const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const subject = req.body.subject;
-    const body = req.body.body || req.body.htmlContent || req.body.content;
-    const targetAudience = req.body.targetAudience;
+    const { subject, body, targetAudience } = req.body as { subject: string; body: string; targetAudience: string };
 
-    if (!subject || !body) {
-      return next(createError("Subject and body are required", 400));
-    }
-
-    const query: Record<string, unknown> = { subscribed: true };
-    if (targetAudience && targetAudience !== "All") query.interest = targetAudience;
-
-    const subscribers = await Newsletter.find(query).select("email");
-    const emails = subscribers.map(sub => sub.email);
+    const recipients = await audienceRecipients(targetAudience);
+    const emails = recipients.map((r) => r.email);
     if (emails.length === 0) return next(createError("No active subscribers found", 400));
 
     // Append admin-configured footer text if set
@@ -174,8 +189,8 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
         await Campaign.findByIdAndUpdate(campaign._id, { status: "sending" });
         const { sendNewsletterBroadcast, sendCampaignFailureNotification } = await import("../services/email");
         
-        const { sentCount, error } = await sendNewsletterBroadcast(subject, finalBody, emails);
-        
+        const { sentCount, error } = await sendNewsletterBroadcast(subject, finalBody, recipients);
+
         if (error) {
           console.error(`[Newsletter] Broadcast failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
           await Campaign.findByIdAndUpdate(campaign._id, {
@@ -210,16 +225,15 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
   } catch (err) { next(err); }
 };
 
-// Support POST /broadcast and POST /campaigns
-router.post("/broadcast", requireAuth, requireRole("admin"), broadcastHandler);
-router.post("/campaigns", requireAuth, requireRole("admin"), broadcastHandler);
-router.post("/campaigns/:id/send", requireAuth, requireRole("admin"), broadcastHandler);
+// POST /broadcast and POST /campaigns create and send a new campaign
+router.post("/broadcast", requireAuth, requireRole("admin"), validate(NewsletterBroadcastSchema), broadcastHandler);
+router.post("/campaigns", requireAuth, requireRole("admin"), validate(NewsletterBroadcastSchema), broadcastHandler);
 
 // ─────────────────────────────────────────────────────────────────
 // ADMIN: POST /newsletter/admin/campaigns/:id/retry
 // Retries a failed campaign. Only sends to recipients that haven't received it yet.
 // ─────────────────────────────────────────────────────────────────
-router.post("/admin/campaigns/:id/retry", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/admin/campaigns/:id/retry", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign) return next(createError("Campaign not found", 404));
@@ -228,18 +242,9 @@ router.post("/admin/campaigns/:id/retry", requireAuth, async (req: Request, res:
       return next(createError("Only failed campaigns can be retried", 400));
     }
 
-    // Determine target audience and fetch emails (similar to broadcast)
-    let emails: string[] = [];
-    if (campaign.targetAudience === "All") {
-      const subs = await Newsletter.find({ status: "subscribed" }).select("email").lean();
-      emails = subs.map((s) => s.email);
-    } else {
-      const subs = await Newsletter.find({ status: "subscribed", "interests.name": campaign.targetAudience }).select("email").lean();
-      emails = subs.map((s) => s.email);
-    }
-    
-    // We resume from the last successfully sent count
-    const remainingEmails = emails.slice(campaign.sentCount);
+    // Same audience query and order as the original send, resumed after the sent count
+    const recipients = await audienceRecipients(campaign.targetAudience);
+    const remainingEmails = recipients.slice(campaign.sentCount);
     if (remainingEmails.length === 0) {
       // Edge case: all sent but marked failed? Just mark as sent.
       campaign.status = "sent";

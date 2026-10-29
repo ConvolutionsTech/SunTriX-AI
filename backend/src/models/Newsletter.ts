@@ -1,4 +1,7 @@
+import crypto from "crypto";
 import mongoose, { Schema, Document } from "mongoose";
+
+export const newUnsubscribeToken = () => crypto.randomBytes(32).toString("base64url");
 
 export interface INewsletter extends Document {
   name: string;
@@ -8,6 +11,8 @@ export interface INewsletter extends Document {
   // Double opt-in fields — only populated when NEWSLETTER_DOUBLE_OPTIN=true
   confirmToken?: string;        // random hex token sent in confirmation email
   confirmTokenExpiry?: Date;    // 24 hours from subscription time
+  /** Secret for the one-click unsubscribe link in every campaign email */
+  unsubscribeToken: string;
   createdAt: Date;
 }
 
@@ -20,6 +25,7 @@ const NewsletterSchema = new Schema<INewsletter>(
     // Double opt-in support
     confirmToken:       { type: String, default: null, index: true, sparse: true },
     confirmTokenExpiry: { type: Date, default: null },
+    unsubscribeToken:   { type: String, default: newUnsubscribeToken, index: true },
   },
   { timestamps: true }
 );

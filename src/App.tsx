@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { I18nProvider } from "@/lib/i18n";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import NewsletterStatus from "./pages/NewsletterStatus";
 import ServicesOverview from "./pages/ServicesOverview";
 
 import DynamicService from "./pages/services/DynamicService";
@@ -119,6 +120,9 @@ const AppRoutes = () => {
           <Route path="users" element={<AdminUsers />} />
           <Route path="account" element={<AdminAccount />} />
         </Route>
+
+        <Route path="/newsletter/confirm/:token" element={<NewsletterStatus mode="confirm" />} />
+        <Route path="/newsletter/unsubscribe/:token" element={<NewsletterStatus mode="unsubscribe" />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -48,9 +48,14 @@ const Footer = () => {
       });
       
       if (res.error) {
-        toast({ title: "Already subscribed", description: "This email is already on our list." });
+        toast({ title: "Couldn't subscribe", description: res.error, variant: "destructive" });
       } else {
-        toast({ title: "Subscribed!", description: "You've successfully joined our newsletter." });
+        const needsConfirmation = (res.data as { requiresConfirmation?: boolean } | null)?.requiresConfirmation;
+        toast(
+          needsConfirmation
+            ? { title: "Check your inbox", description: "Click the link we just sent to confirm your subscription." }
+            : { title: "Subscribed!", description: "You've successfully joined our newsletter." }
+        );
         setEmail("");
         setName("");
         setInterest("General News");

@@ -123,6 +123,8 @@ export const ENDPOINTS = {
 
   // Newsletter
   NEWSLETTER_SUBSCRIBE: `${BASE_URL}/newsletter`,
+  NEWSLETTER_CONFIRM: (token: string) => `${BASE_URL}/newsletter/confirm/${token}`,
+  NEWSLETTER_UNSUBSCRIBE: (token: string) => `${BASE_URL}/newsletter/unsubscribe/${token}`,
   NEWSLETTER_LIST: `${BASE_URL}/newsletter`,
   NEWSLETTER_BROADCAST: `${BASE_URL}/newsletter/broadcast`,
   NEWSLETTER_GENERATE: `${BASE_URL}/newsletter/generate-template`,
