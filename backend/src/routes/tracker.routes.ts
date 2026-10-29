@@ -8,7 +8,7 @@ import TrackerMessage from "../models/TrackerMessage";
 import TaskRequest from "../models/TaskRequest";
 import { requireAuth } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
-import { validate, ChatMessageSchema, TrackerUpdateSchema } from "../middleware/validate";
+import { validate, ChatMessageSchema, TrackerUpdateSchema, PhaseAdvanceSchema, DeliverableCompleteSchema, MarkPaidManuallySchema, TRACKER_PHASES } from "../middleware/validate";
 import { 
   sendTrackerPhaseAdvancedEmail, 
   sendTrackerDeliverableReviewEmail,
@@ -74,11 +74,17 @@ router.get("/admin/:id", requireAuth, async (req: Request, res: Response, next: 
   } catch (err) { next(err); }
 });
 
-router.post("/admin/:id/phase/advance", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/admin/:id/phase/advance", requireAuth, validate(PhaseAdvanceSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { nextPhase, adminNote } = req.body;
     const tracker = await ProjectTracker.findById(req.params.id);
     if (!tracker) return next(createError("Tracker not found", 404));
+
+    // Phases move forward one step at a time
+    const expected = TRACKER_PHASES[TRACKER_PHASES.indexOf(tracker.currentPhase as (typeof TRACKER_PHASES)[number]) + 1];
+    if (nextPhase !== expected) {
+      return next(createError(expected ? `The next phase after ${tracker.currentPhase} is ${expected}` : "The project is already in its last phase", 400));
+    }
 
     // Complete current phase
     const currentPhaseIndex = tracker.phases.findIndex(p => p.name === tracker.currentPhase);
@@ -109,7 +115,7 @@ router.post("/admin/:id/phase/advance", requireAuth, async (req: Request, res: R
   } catch (err) { next(err); }
 });
 
-router.post("/admin/:id/deliverable/:dId/complete", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/admin/:id/deliverable/:dId/complete", requireAuth, validate(DeliverableCompleteSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { attachedUrl } = req.body;
     const tracker = await ProjectTracker.findById(req.params.id);
@@ -446,7 +452,7 @@ router.post("/admin/:id/milestone/:mId/mark-payable", requireAuth, async (req: R
 });
 
 // ─── ADMIN: Mark milestone paid manually (wire, check, outside stripe) ─
-router.post("/admin/:id/milestone/:mId/mark-paid-manually", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/admin/:id/milestone/:mId/mark-paid-manually", requireAuth, validate(MarkPaidManuallySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { paymentMethod, note } = req.body;
     const tracker = await ProjectTracker.findById(req.params.id);

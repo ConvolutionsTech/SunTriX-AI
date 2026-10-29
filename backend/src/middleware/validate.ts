@@ -96,6 +96,22 @@ export const TrackerUpdateSchema = z.object({
   nextUpdateDue: z.coerce.date().optional(),
 });
 
+export const TRACKER_PHASES = ["Discovery", "Design", "Development", "Testing", "Delivery"] as const;
+
+export const PhaseAdvanceSchema = z.object({
+  nextPhase: z.enum(TRACKER_PHASES),
+  adminNote: z.string().trim().max(2000).optional(),
+});
+
+export const DeliverableCompleteSchema = z.object({
+  attachedUrl: z.union([z.literal(""), z.string().trim().url().max(2048).refine((v) => /^https?:\/\//i.test(v), "Must be an http(s) URL")]).optional(),
+});
+
+export const MarkPaidManuallySchema = z.object({
+  paymentMethod: z.string().trim().max(100).optional(),
+  note: z.string().trim().max(2000).optional(),
+});
+
 // ─── ADMIN SCHEMAS ─────────────────────────────────────────────────────────
 
 // POST /newsletter/broadcast
