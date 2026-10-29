@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +10,6 @@ import { I18nProvider } from "@/lib/i18n";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { RobotsGuard } from "./components/RobotsGuard";
-import NewsletterStatus from "./pages/NewsletterStatus";
 import ServicesOverview from "./pages/ServicesOverview";
 
 import DynamicService from "./pages/services/DynamicService";
@@ -23,39 +23,43 @@ import Technologies from "./pages/Technologies";
 import Partnership from "./pages/Partnership";
 import Testimonials from "./pages/Testimonials";
 import { PrivacyPolicy, TermsOfService, CookiePolicy } from "./pages/Legal";
-import TrackRequest from "./pages/TrackRequest";
 import Blog from "./pages/Blog";
 import BlogDetail from "./pages/BlogDetail";
 import Pricing from "./pages/Pricing";
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminLayout from "./pages/admin/AdminLayout";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminTasks from "./pages/admin/AdminTasks";
-import AdminMessages from "./pages/admin/AdminMessages";
-import AdminNewsletter from "./pages/admin/AdminNewsletter";
-import AdminSettings from "./pages/admin/AdminSettings";
-import AdminPortfolio from "./pages/admin/AdminPortfolio";
-import AdminContent from "./pages/admin/AdminContent";
-import AdminDepartments from "./pages/admin/AdminDepartments";
-import AdminMedia from "./pages/admin/AdminMedia";
-import AdminAuditLog from "./pages/admin/AdminAuditLog";
-import AdminTeam from "./pages/admin/AdminTeam";
-import AdminClients from "./pages/admin/AdminClients";
-import AdminPricing from "./pages/admin/AdminPricing";
-import AdminBlog from "./pages/admin/AdminBlog";
-import AdminPayments from "./pages/admin/AdminPayments";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminAccount from "./pages/admin/AdminAccount";
-import AdminPasswordReset from "./pages/admin/AdminPasswordReset";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentCancel from "./pages/PaymentCancel";
-import ClientInvoice from "./pages/ClientInvoice";
-import ClientProposal from "./pages/ClientProposal";
-import ClientContract from "./pages/ClientContract";
-import ClientProjectHub from "./pages/ClientProjectHub";
 import { DynamicFavicon } from "@/components/DynamicFavicon";
 
 import { queryClient } from "@/lib/query-client";
+import LoadingSkeleton from "./components/LoadingSkeleton";
+
+// Admin, client capability-link and payment pages load on demand: public visitors never download them
+const NewsletterStatus = lazy(() => import("./pages/NewsletterStatus"));
+const TrackRequest = lazy(() => import("./pages/TrackRequest"));
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminTasks = lazy(() => import("./pages/admin/AdminTasks"));
+const AdminMessages = lazy(() => import("./pages/admin/AdminMessages"));
+const AdminNewsletter = lazy(() => import("./pages/admin/AdminNewsletter"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminPortfolio = lazy(() => import("./pages/admin/AdminPortfolio"));
+const AdminContent = lazy(() => import("./pages/admin/AdminContent"));
+const AdminDepartments = lazy(() => import("./pages/admin/AdminDepartments"));
+const AdminMedia = lazy(() => import("./pages/admin/AdminMedia"));
+const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
+const AdminTeam = lazy(() => import("./pages/admin/AdminTeam"));
+const AdminClients = lazy(() => import("./pages/admin/AdminClients"));
+const AdminPricing = lazy(() => import("./pages/admin/AdminPricing"));
+const AdminBlog = lazy(() => import("./pages/admin/AdminBlog"));
+const AdminPayments = lazy(() => import("./pages/admin/AdminPayments"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminAccount = lazy(() => import("./pages/admin/AdminAccount"));
+const AdminPasswordReset = lazy(() => import("./pages/admin/AdminPasswordReset"));
+const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const PaymentCancel = lazy(() => import("./pages/PaymentCancel"));
+const ClientInvoice = lazy(() => import("./pages/ClientInvoice"));
+const ClientProposal = lazy(() => import("./pages/ClientProposal"));
+const ClientContract = lazy(() => import("./pages/ClientContract"));
+const ClientProjectHub = lazy(() => import("./pages/ClientProjectHub"));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -70,6 +74,7 @@ const AppRoutes = () => {
     <>
       <ScrollToTop />
       <RobotsGuard />
+      <Suspense fallback={<LoadingSkeleton />}>
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/services" element={<ServicesOverview />} />
@@ -128,6 +133,7 @@ const AppRoutes = () => {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
     </>
   );
 };
