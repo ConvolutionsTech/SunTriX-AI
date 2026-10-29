@@ -5,7 +5,11 @@ import Portfolio from "../models/Portfolio";
 import Testimonial from "../models/Testimonial";
 import Newsletter from "../models/Newsletter";
 import Post from "../models/Post";
-import { requireAuth } from "../middleware/auth";
+import EmailLog from "../models/EmailLog";
+import { requireAuth, requireAdmin } from "../middleware/auth";
+import { outboxStatus, requeueEmail } from "../lib/emailOutbox";
+import { logAudit } from "../lib/audit";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
@@ -15,7 +19,7 @@ router.get("/stats", requireAuth, async (_req: Request, res: Response, next: Nex
     const [
       totalTasks, pendingTasks, completedTasks, totalContacts,
       unreadContacts, totalPortfolio, publishedPortfolio,
-      totalTestimonials, totalSubscribers,
+      totalTestimonials, totalSubscribers, failedEmails,
     ] = await Promise.all([
       TaskRequest.countDocuments(),
       TaskRequest.countDocuments({ status: { $in: ["new", "in_review"] } }),
@@ -26,12 +30,14 @@ router.get("/stats", requireAuth, async (_req: Request, res: Response, next: Nex
       Portfolio.countDocuments({ status: "published" }),
       Testimonial.countDocuments(),
       Newsletter.countDocuments({ subscribed: true }),
+      EmailLog.countDocuments({ status: "failed", createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
     ]);
     const revenue = completedTasks * 15000;
     res.json({
       totalTasks, pendingTasks, completedTasks, totalContacts,
       unreadContacts, totalPortfolio, publishedPortfolio,
       totalTestimonials, totalSubscribers, revenue,
+      email: { configured: outboxStatus().configured, failedLast7Days: failedEmails },
     });
   } catch (err) { next(err); }
 });
@@ -175,6 +181,31 @@ router.get("/activity", requireAuth, async (req: Request, res: Response, next: N
     ];
 
     res.json({ trendChart, taskPipeline, topServices, growth, contentHealth, feed, funnel });
+  } catch (err) { next(err); }
+});
+
+const EMAIL_STATUSES = new Set(["queued", "sending", "sent", "failed"]);
+
+// GET /admin/email-log?status=failed — delivery log (no bodies or attachments)
+router.get("/email-log", requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = typeof req.query.status === "string" && EMAIL_STATUSES.has(req.query.status) ? req.query.status : undefined;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 100, 1), 500);
+    const [logs, counts] = await Promise.all([
+      EmailLog.find(status ? { status } : {}).sort({ createdAt: -1 }).limit(limit)
+        .select("template to subject status attempts error providerId createdAt sentAt nextAttemptAt").lean(),
+      EmailLog.aggregate<{ _id: string; n: number }>([{ $group: { _id: "$status", n: { $sum: 1 } } }]),
+    ]);
+    res.json({ ...outboxStatus(), counts: Object.fromEntries(counts.map((c) => [c._id, c.n])), logs });
+  } catch (err) { next(err); }
+});
+
+// POST /admin/email-log/:id/retry — queue a failed email again
+router.post("/email-log/:id/retry", requireAuth, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!(await requeueEmail(req.params.id))) return next(createError("Only failed emails can be retried", 409));
+    await logAudit(req, "update", "email", req.params.id, "Email re-queued");
+    res.json({ message: "Email queued for another attempt" });
   } catch (err) { next(err); }
 });
 

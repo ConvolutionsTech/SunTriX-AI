@@ -7,6 +7,7 @@ import Contract from "../models/Contract";
 import Campaign from "../models/Campaign";
 import { getSetting, refreshSettingsIfChanged } from "./configLoader";
 import { logger } from "./logger";
+import { drainEmailOutbox } from "./emailOutbox";
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
 // A broadcast runs in the background of the instance that queued it; one that
@@ -48,6 +49,11 @@ export function startScheduler(): void {
   // ── Every 15 seconds: pick up settings changed on another instance ─────
   schedule("*/15 * * * * *", () => {
     refreshSettingsIfChanged().catch((err) => logger.error({ err }, "[Scheduler] Could not refresh settings"));
+  });
+
+  // ── Every 15 seconds: deliver queued email (retries with backoff) ──────
+  schedule("*/15 * * * * *", () => {
+    drainEmailOutbox().catch((err) => logger.error({ err }, "[Scheduler] Email outbox drain failed"));
   });
 
   // ── Every 5 minutes: finish post-payment work that failed the first time ───

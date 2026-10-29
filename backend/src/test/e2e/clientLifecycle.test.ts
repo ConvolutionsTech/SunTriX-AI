@@ -14,6 +14,7 @@ import Payment from "../../models/Payment";
 import ProjectTracker from "../../models/ProjectTracker";
 import * as groq from "../../services/groq";
 import { resendAdapter } from "../../integrations/resend/resend.adapter";
+import { drainEmailOutbox } from "../../lib/emailOutbox";
 import { stripeAdapter } from "../../integrations/stripe/stripe.adapter";
 import { connectTestDb, disconnectTestDb } from "../helpers/db";
 import { staffToken } from "../helpers/auth";
@@ -39,6 +40,7 @@ function signedWebhook(event: object) {
 beforeAll(async () => {
   process.env.STRIPE_SECRET_KEY = "sk_test_dummy";
   process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  process.env.RESEND_API_KEY = "re_test_e2e";
   await connectTestDb();
   admin = { Authorization: `Bearer ${await staffToken("admin")}` };
   viewer = { Authorization: `Bearer ${await staffToken("viewer")}` };
@@ -62,6 +64,7 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
+  delete process.env.RESEND_API_KEY;
   vi.restoreAllMocks();
   await disconnectTestDb();
 });
@@ -100,9 +103,11 @@ describe("client lifecycle end to end", () => {
     expect((await Proposal.findById(proposalId))!.milestones[1].order).toBe(1);
 
     // 4. Sending emails the client a link with the formatted total
+    await drainEmailOutbox();
     mail.length = 0;
     expect((await request(app).post(`/v1/proposals/${proposalId}/send`).set(admin)).status).toBe(200);
     expect((await TaskRequest.findById(taskId))!.status).toBe("proposal_sent");
+    await drainEmailOutbox(); // transactional mail is queued, then delivered by the outbox job
     expect(mail.some((m) => m.to.includes("ada@client.test") && m.html.includes(`/proposal/${proposalToken}`))).toBe(true);
     expect((await request(app).post(`/v1/proposals/${proposalId}/send`).set(admin)).status).toBe(409);
 
@@ -113,11 +118,13 @@ describe("client lifecycle end to end", () => {
     expect((await request(app).get("/v1/proposals/view/does-not-exist")).status).toBe(404);
 
     // 6. Client asks for changes → back to review, admin notified with the note
+    await drainEmailOutbox();
     mail.length = 0;
     const changes = await request(app).post(`/v1/proposals/request-changes/${proposalToken}`).send({ clientNote: "Please lower the launch price." });
     expect(changes.status).toBe(200);
     expect((await Proposal.findById(proposalId))!.clientNote).toBe("Please lower the launch price.");
     expect((await TaskRequest.findById(taskId))!.status).toBe("in_review");
+    await drainEmailOutbox(); // transactional mail is queued, then delivered by the outbox job
     expect(mail.some((m) => m.html.includes("Please lower the launch price."))).toBe(true);
 
     // 7. Re-send; two concurrent accepts create exactly one contract
@@ -177,9 +184,11 @@ describe("client lifecycle end to end", () => {
     expect(paid!.paidAt).toBeTruthy();
     expect(paid!.stripePaymentIntentId).toBe("pi_e2e_1");
     expect((await TaskRequest.findById(taskId))!.status).toBe("in_progress");
+    await drainEmailOutbox();
     mail.length = 0;
     expect((await signedWebhook(event)).status).toBe(200);
     expect((await TaskRequest.findById(taskId))!.statusHistory.filter((h) => h.status === "in_progress")).toHaveLength(1);
+    await drainEmailOutbox(); // transactional mail is queued, then delivered by the outbox job
     expect(mail).toHaveLength(0);
 
     // 16. Sign-off: refused while milestones are unpaid; one completion under concurrent approvals

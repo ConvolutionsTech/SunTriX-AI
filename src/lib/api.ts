@@ -146,6 +146,8 @@ export const ENDPOINTS = {
   ADMIN_DASHBOARD_STATS: `${BASE_URL}/admin/stats`,
   ADMIN_ACTIVITY: (days = 30) => `${BASE_URL}/admin/activity?days=${days}`,
   ADMIN_NOTIFICATIONS: `${BASE_URL}/admin/notifications`,
+  ADMIN_EMAIL_LOG: (status?: string) => `${BASE_URL}/admin/email-log${status ? `?status=${status}` : ""}`,
+  ADMIN_EMAIL_RETRY: (id: string) => `${BASE_URL}/admin/email-log/${id}/retry`,
   ADMIN_TASKS: `${BASE_URL}/task-requests`,
   ADMIN_CONTACTS: `${BASE_URL}/contact`,
   ADMIN_USERS: `${BASE_URL}/admin/users`,

@@ -1807,6 +1807,12 @@ The project management view for active projects:
 
 All emails are sent via **Resend** using the `FROM_EMAIL_ADDRESS` setting (must be verified in Resend).
 
+### 10.0 Delivery: outbox, retries and the email log
+
+Transactional emails are not sent inside the request. Each one is written to the `EmailLog` collection (`status: queued`) and a scheduler job delivers due rows every 15 seconds. A failed send is retried with backoff (30 s, 1 min, 2 min, 4 min) up to 5 attempts, then marked `failed`. Several instances can drain at once; each row is claimed atomically. Admin replies to contact messages are sent immediately (the admin waits for the result) but are logged too. Newsletter broadcasts use Resend's batch API directly.
+
+Without `RESEND_API_KEY`, emails fail with `EMAIL_NOT_CONFIGURED` instead of being "sent" with a dummy key. The admin dashboard then shows a red "Email is not configured" banner, or "Some emails could not be delivered" with a list of failures and a Retry button. API: `GET /v1/admin/email-log?status=failed` and `POST /v1/admin/email-log/:id/retry` (admin only). Delivered rows are kept for 90 days.
+
 ### 10.1 Email Templates (Complete List)
 
 | Function | Trigger | Recipient | Subject |

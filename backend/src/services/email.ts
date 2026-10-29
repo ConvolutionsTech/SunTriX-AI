@@ -2,8 +2,11 @@ import { resendAdapter } from "../integrations/resend/resend.adapter";
 import { getSetting } from "../lib/configLoader";
 import { escapeFields } from "../lib/escapeHtml";
 import { logger } from "../lib/logger";
+import { outbox, sendNow } from "../lib/emailOutbox";
 
-// ─── Lazy factory — delegates to ResendAdapter ────────────────────────────
+// Transactional mail goes through the outbox (lib/emailOutbox.ts): queued,
+// delivered by the scheduler with retries, and visible in Admin → Email log.
+// Only the newsletter batch send talks to Resend directly.
 function getResend() {
   return resendAdapter;
 }
@@ -37,7 +40,7 @@ export async function sendContactNotification(data: {
   if (getSetting("EMAIL_CONTACT_NOTIFICATIONS", "true") !== "true") return;
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("contactNotification").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `[${getBrandName()}] New Contact: ${data.subject}`,
@@ -80,7 +83,7 @@ export async function sendTaskNotification(data: {
   if (getSetting("EMAIL_TASK_NOTIFICATIONS", "true") !== "true") return;
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("taskNotification").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `[${getBrandName()}] New Task Request: ${data.projectTitle || data.service}`,
@@ -116,7 +119,7 @@ export async function sendTaskNotification(data: {
 export async function sendTrackerPhaseAdvancedEmail(data: { clientEmail: string; projectTitle: string; newPhase: string; portalUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerPhaseAdvancedEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `Project Update: Now in ${data.newPhase} — ${data.projectTitle}`,
@@ -133,7 +136,7 @@ export async function sendTrackerPhaseAdvancedEmail(data: { clientEmail: string;
 export async function sendTrackerDeliverableReviewEmail(data: { clientEmail: string; projectTitle: string; deliverableTitle: string; portalUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerDeliverableReviewEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `Action Required: Review Deliverable for ${data.projectTitle}`,
@@ -151,7 +154,7 @@ export async function sendTrackerUpdateEmail(data: { clientEmail: string; projec
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const color = data.isActionRequired ? "#ef4444" : "#10b981";
-    await getResend().emails.send({
+    await outbox("trackerUpdateEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `${data.isActionRequired ? 'Action Required: ' : ''}New Update on ${data.projectTitle}`,
@@ -167,7 +170,7 @@ export async function sendTrackerUpdateEmail(data: { clientEmail: string; projec
 export async function sendTrackerFileEmail(data: { clientEmail: string; projectTitle: string; filename: string; portalUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerFileEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `New File Shared: ${data.filename} — ${data.projectTitle}`,
@@ -183,7 +186,7 @@ export async function sendTrackerFileEmail(data: { clientEmail: string; projectT
 export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerPaymentDueEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `Invoice Ready: ${data.milestoneTitle} — ${data.projectTitle}`,
@@ -200,7 +203,7 @@ export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; pr
 export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerPaymentConfirmedEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `Payment Received: ${data.milestoneTitle} — ${data.projectTitle}`,
@@ -217,7 +220,7 @@ export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: stri
 export async function sendTrackerClientActionToAdminEmail(data: { actionStr: string; projectTitle: string; targetName: string; adminUrl: string; }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    await getResend().emails.send({
+    await outbox("trackerClientActionToAdminEmail").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `Client ${data.actionStr} — ${data.projectTitle}`,
@@ -245,7 +248,7 @@ export async function sendInvoiceEmail(data: {
   const appUrl  = getFrontendUrl();
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("invoiceEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `Invoice from ${brand} — ${data.description}`,
@@ -309,7 +312,7 @@ export async function sendPaymentConfirmation(data: {
   const kickoff = getKickoffSla();
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("paymentConfirmation").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `✅ Payment Confirmed — ${brand}`,
@@ -421,7 +424,7 @@ export async function sendCampaignFailureNotification(data: {
 }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("campaignFailureNotification").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `⚠️ Campaign Delivery Failed — ${data.subject}`,
@@ -448,16 +451,12 @@ export async function sendDirectReply(
   subject: string,
   htmlBody: string
 ): Promise<void> {
+  // Sent synchronously (the admin is waiting for the result) but still logged
   try {
-    const { error } = await getResend().emails.send({
-      from: getFromAddress(),
-      to: [toEmail],
-      subject,
-      html: htmlBody,
-    });
+    const { error } = await sendNow("directReply", { from: getFromAddress(), to: [toEmail], subject, html: htmlBody });
     if (error) {
       logger.error({ err: error }, "Resend Direct Reply Error");
-      throw new Error(error.message);
+      throw new Error(error);
     }
   } catch (err: any) {
     logger.error({ err }, "Failed to send direct reply");
@@ -488,7 +487,7 @@ export async function sendProposalEmail(data: {
     </div>`).join("");
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("proposalEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `📋 Proposal from ${brand} — ${data.proposalTitle}`,
@@ -547,7 +546,7 @@ export async function sendChangesRequestedNotification(data: {
 }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("changesRequestedNotification").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `[${getBrandName()}] Proposal Changes Requested — ${data.projectTitle}`,
@@ -587,7 +586,7 @@ export async function sendContractEmail(data: {
   const appUrl  = getFrontendUrl();
 
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("contractEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `📄 Service Agreement Ready — ${data.projectTitle} | ${brand}`,
@@ -654,7 +653,7 @@ export async function sendContractSignedNotification(data: {
 }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("contractSignedNotification").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `✅ Contract Signed — ${data.projectTitle} | ${getBrandName()}`,
@@ -687,7 +686,7 @@ export async function sendTrackerCompletionRequestEmail(data: {
 }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("trackerCompletionRequestEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject: `✅ Your Project is Ready for Final Sign-Off — ${data.projectTitle}`,
@@ -733,7 +732,7 @@ export async function sendTrackerCompletionApprovedEmail(data: {
 }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("trackerCompletionApprovedEmail").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `🏆 Project Completed & Approved — ${data.projectTitle}`,
@@ -802,7 +801,7 @@ export async function sendSignedContractEmail(data: {
 
   try {
     // Send to client
-    await getResend().emails.send({
+    await outbox("signedContractEmail").send({
       from: getFromAddress(),
       to: [data.clientEmail],
       subject,
@@ -810,7 +809,7 @@ export async function sendSignedContractEmail(data: {
       attachments: [{ filename: data.filename, content: attachmentContent }],
     });
     // Send to admin
-    await getResend().emails.send({
+    await outbox("signedContractEmail").send({
       from: getFromAddress(),
       to: [data.adminEmail],
       subject: `[Admin Copy] ${subject}`,
@@ -833,7 +832,7 @@ export async function sendNewsletterConfirmationEmail(data: {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const brand = getBrandName();
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("newsletterConfirmationEmail").send({
       from: getFromAddress(),
       to: [data.email],
       subject: `Confirm your subscription to ${brand}`,
@@ -888,7 +887,7 @@ export async function sendNewsletterWelcomeEmail(data: {
   try {
     const brand = getBrandName();
     const frontendUrl = getFrontendUrl();
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("newsletterWelcomeEmail").send({
       from: getFromAddress(),
       to: [data.email],
       subject: `Welcome to ${brand} — you're now subscribed!`,
@@ -935,7 +934,7 @@ export async function sendNewsletterWelcomeEmail(data: {
 export async function sendPasswordResetEmail(data: { email: string; name: string; resetUrl: string }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("passwordResetEmail").send({
       from: getFromAddress(),
       to: [data.email],
       subject: `Reset your ${getBrandName()} admin password`,
@@ -958,7 +957,7 @@ export async function sendPasswordResetEmail(data: { email: string; name: string
 export async function sendAdminAlert(data: { subject: string; message: string; adminUrl?: string }): Promise<void> {
   const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
-    const { error } = await getResend().emails.send({
+    const { error } = await outbox("adminAlert").send({
       from: getFromAddress(),
       to: [getAdminEmail()],
       subject: `[${getBrandName()}] ${data.subject}`,

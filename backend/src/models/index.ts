@@ -8,6 +8,7 @@ import "./CmsContent";
 import "./ContactMessage";
 import "./Contract";
 import "./Department";
+import "./EmailLog";
 import "./MediaAsset";
 import "./Newsletter";
 import "./Payment";

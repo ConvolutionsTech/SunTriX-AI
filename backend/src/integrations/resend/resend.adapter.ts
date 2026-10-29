@@ -19,7 +19,9 @@ function counted<T extends { error?: unknown }>(kind: "single" | "batch", send: 
 export class ResendAdapter {
   private getClient(): Resend {
     const apiKey = getSetting("RESEND_API_KEY");
-    return new Resend(apiKey || "re_dummy_key");
+    // Fail loudly instead of sending with a dummy key and logging "API key is invalid"
+    if (!apiKey) throw Object.assign(new Error("Email is not configured (RESEND_API_KEY is not set)"), { code: "EMAIL_NOT_CONFIGURED" });
+    return new Resend(apiKey);
   }
 
   public get emails(): any {

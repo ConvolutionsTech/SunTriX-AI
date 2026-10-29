@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { resendAdapter } from "../integrations/resend/resend.adapter";
 import * as email from "../services/email";
+import EmailLog from "../models/EmailLog";
 import { updateSettingCache } from "../lib/configLoader";
 import { escapeHtml, escapeFields } from "../lib/escapeHtml";
 
@@ -9,7 +10,11 @@ const sent: Array<{ subject: string; html: string; from: string }> = [];
 
 beforeEach(() => {
   sent.length = 0;
-  // Capture what would be handed to Resend instead of sending it
+  // Capture what would be queued in the outbox (or handed to Resend directly) instead of sending it
+  vi.spyOn(EmailLog, "create").mockImplementation((async (msg: { subject: string; html: string; from: string; status?: string }) => {
+    if (!msg.status) sent.push(msg);
+    return { _id: "test" };
+  }) as never);
   vi.spyOn(resendAdapter, "emails", "get").mockReturnValue({
     send: async (msg: { subject: string; html: string; from: string }) => {
       sent.push(msg);
