@@ -58,7 +58,7 @@ const PUBLIC_ROUTES = new Set([
   "GET /v1/testimonials", "GET /v1/departments", "GET /v1/departments/:id", "GET /v1/team", "GET /v1/clients",
   "GET /v1/pricing", "GET /v1/posts", "GET /v1/posts/slug/:slug", "GET /v1/settings/public",
   "GET /v1/cms/hero", "GET /v1/cms/announcement", "GET /v1/cms/company", "GET /v1/cms/seo/:page",
-  "GET /v1/cms/social-links", "GET /v1/cms/intro-video",
+  "GET /v1/cms/social-links", "GET /v1/cms/intro-video", "GET /v1/cms/media-registry",
   // Public forms and chatbot (rate-limited)
   "POST /v1/task-requests", "POST /v1/contact", "POST /v1/newsletter", "POST /v1/chat",
   // Capability links sent to clients by email

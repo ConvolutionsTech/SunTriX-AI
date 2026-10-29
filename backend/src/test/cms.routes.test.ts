@@ -27,7 +27,7 @@ describe("CMS content (T-BR-11, T-OPA-14)", () => {
     }
     const seo = await request(app).get("/v1/cms/seo/home");
     expect(seo.body).toMatchObject({ page: "home", title: expect.any(String) });
-    for (const key of ["hero", "announcement", "company", "social-links", "intro-video"]) {
+    for (const key of ["hero", "announcement", "company", "social-links", "intro-video", "media-registry"]) {
       expect((await request(app).get(`/v1/cms/${key}`)).status).toBe(200);
     }
     expect(await CmsContent.countDocuments()).toBe(0);
@@ -58,6 +58,16 @@ describe("CMS content (T-BR-11, T-OPA-14)", () => {
       expect(res.status).toBeLessThan(500);
     }
     expect(await CmsContent.countDocuments()).toBe(0);
+  });
+
+  it("the media registry maps known image slots to http(s) URLs (T-FE-13)", async () => {
+    admin = { Authorization: `Bearer ${await staffToken("admin")}` };
+    expect((await request(app).get("/v1/cms/media-registry")).body).toEqual({ entries: {} });
+    const entries = { "hero-banner": "https://res.cloudinary.com/x/hero.png" };
+    expect((await request(app).put("/v1/cms/media-registry").set(admin).send({ entries })).status).toBe(200);
+    expect((await request(app).get("/v1/cms/media-registry")).body).toEqual({ entries });
+    expect((await request(app).put("/v1/cms/media-registry").set(admin).send({ entries: { "not-a-slot": "https://x" } })).status).toBe(400);
+    expect((await request(app).put("/v1/cms/media-registry").set(admin).send({ entries: { "hero-banner": "javascript:alert(1)" } })).status).toBe(400);
   });
 
   it("viewers can't edit content", async () => {

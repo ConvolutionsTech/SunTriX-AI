@@ -28,6 +28,13 @@ const httpUrl = z
 const text = (max = 500) => z.string().max(max);
 const cta = z.object({ text: text(80), link }).passthrough();
 
+/** Image slots the public site renders (src/hooks/use-media.ts has the bundled fallbacks). */
+export const MEDIA_SLOTS = [
+  "hero-banner", "suntrix-logo", "ceo-portrait", "about-hero", "services-hero", "workflow-hero", "workflow-pipeline",
+  "video-demo-thumb", "agency-intro-video", "dept-agents", "dept-intelligence", "dept-vision", "dept-platform",
+  "portfolio-agents", "portfolio-ml", "portfolio-vision", "portfolio-saas", "portfolio-support", "portfolio-surveillance",
+] as const;
+
 const SCHEMAS = {
   hero: z
     .object({
@@ -61,6 +68,8 @@ const SCHEMAS = {
     .passthrough(),
   "social-links": z.object({ links: z.array(z.object({ platform: text(50), url: link, enabled: z.boolean().optional() }).passthrough()).max(30) }).passthrough(),
   "intro-video": z.object({ url: httpUrl.optional(), enabled: z.boolean().optional() }).passthrough(),
+  // Which uploaded file the site uses for each image slot (Admin → Media → "Use as")
+  "media-registry": z.object({ entries: z.partialRecord(z.enum(MEDIA_SLOTS), httpUrl) }).strict(),
   seo: z
     .object({ title: text(120).optional(), description: text(320).optional(), keywords: text(500).optional(), ogImage: httpUrl.optional() })
     .passthrough(),
@@ -109,6 +118,7 @@ const DEFAULTS: Record<string, unknown> = {
     ],
   },
   "intro-video": { url: "", enabled: false },
+  "media-registry": { entries: {} },
 };
 
 const SEO_DEFAULT = {
@@ -143,7 +153,7 @@ function parse<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
   return result.data;
 }
 
-type BlockKey = "hero" | "announcement" | "company" | "social-links" | "intro-video";
+type BlockKey = "hero" | "announcement" | "company" | "social-links" | "intro-video" | "media-registry";
 
 const getBlock = (key: BlockKey) => async (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -171,6 +181,8 @@ router.get("/social-links", getBlock("social-links"));
 router.put("/social-links", requireAuth, requireAdmin, putBlock("social-links"));
 router.get("/intro-video", getBlock("intro-video"));
 router.put("/intro-video", requireAuth, requireAdmin, putBlock("intro-video"));
+router.get("/media-registry", getBlock("media-registry"));
+router.put("/media-registry", requireAuth, requireAdmin, putBlock("media-registry"));
 
 function seoPage(req: Request): string {
   const page = req.params.page;

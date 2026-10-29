@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { mediaStore } from "@/lib/cms-store";
+import { useEffect, useState } from "react";
+import { apiRequest, ENDPOINTS } from "@/lib/api";
 
 // Static asset imports as fallbacks
 import heroBanner from "@/assets/hero-banner.png";
@@ -30,6 +30,7 @@ const FALLBACKS: Record<string, string> = {
   "workflow-hero": workflowHero,
   "workflow-pipeline": workflowPipeline,
   "video-demo-thumb": videoDemoThumb,
+  "agency-intro-video": videoDemoThumb,
   "dept-agents": deptAgents,
   "dept-intelligence": deptIntelligence,
   "dept-vision": deptVision,
@@ -42,18 +43,58 @@ const FALLBACKS: Record<string, string> = {
   "portfolio-surveillance": portfolioSurveillance,
 };
 
-export function useMedia(key: string): string {
-  const resolve = useCallback(() => {
-    const storeUrl = mediaStore.get(key);
-    return storeUrl || FALLBACKS[key] || "";
-  }, [key]);
+/** Image slots the admin can point at an uploaded file (must match MEDIA_SLOTS in the backend). */
+export const MEDIA_SLOTS = Object.keys(FALLBACKS);
 
+// One shared copy of the registry for the whole page, refreshed at most every 2 minutes
+const TTL_MS = 2 * 60 * 1000;
+let entries: Record<string, string> = {};
+let fetchedAt = 0;
+let inflight: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+
+function refresh(): void {
+  if (inflight || Date.now() - fetchedAt < TTL_MS) return;
+  inflight = apiRequest<{ entries?: Record<string, string> }>(ENDPOINTS.CMS_MEDIA_REGISTRY)
+    .then(({ data }) => {
+      if (data?.entries && typeof data.entries === "object") entries = data.entries;
+      fetchedAt = Date.now();
+      listeners.forEach((l) => l());
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      inflight = null;
+    });
+}
+
+/** After an admin change, make every useMedia on the page re-read the registry. */
+export function setMediaRegistry(next: Record<string, string>): void {
+  entries = next;
+  fetchedAt = Date.now();
+  listeners.forEach((l) => l());
+}
+
+/** Test hook. */
+export function resetMediaRegistry(): void {
+  entries = {};
+  fetchedAt = 0;
+  inflight = null;
+}
+
+/** URL for an image slot: the admin's choice from the media registry, else the bundled image. */
+export function useMedia(key: string): string {
+  const resolve = () => entries[key] || FALLBACKS[key] || "";
   const [url, setUrl] = useState(resolve);
 
   useEffect(() => {
-    setUrl(resolve());
-    return mediaStore.subscribe(() => setUrl(resolve()));
-  }, [resolve]);
+    const update = () => setUrl(entries[key] || FALLBACKS[key] || "");
+    listeners.add(update);
+    update();
+    refresh();
+    return () => {
+      listeners.delete(update);
+    };
+  }, [key]);
 
   return url;
 }

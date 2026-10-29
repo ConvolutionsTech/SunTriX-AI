@@ -118,6 +118,7 @@ export const ENDPOINTS = {
   CMS_HERO: `${BASE_URL}/cms/hero`,
   CMS_COMPANY: `${BASE_URL}/cms/company`,
   CMS_SOCIAL_LINKS: `${BASE_URL}/cms/social-links`,
+  CMS_MEDIA_REGISTRY: `${BASE_URL}/cms/media-registry`,
 
   // Departments
   DEPARTMENTS_LIST: `${BASE_URL}/departments`,

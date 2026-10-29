@@ -64,7 +64,7 @@ Notes:
 - Company profile (name, tagline, email, …) comes from `useCompanyInfo()` (`src/hooks/useCompanyInfo.ts`). `GET /cms/company` returns the fields flat — never read `data.data`.
 - Admin sessions (`backend/src/lib/tokens.ts`): 15-min access tokens carry `tv` (Admin.tokenVersion; `requireAuth` checks it via a 60 s cache and takes the role from the DB); 7-day refresh tokens rotate on every use, and reuse of an old one revokes all sessions. Logout, password change/reset and role changes call `revokeAllSessions`. In backend tests, get tokens from `staffToken()` in `src/test/helpers/auth.ts` — hand-signed JWTs for non-existent users are rejected.
 - Auth: `src/lib/auth.ts` `AuthManager` is the only owner of the session (`suntrix_auth_token`, `suntrix_refresh_token`, `suntrix_auth_user`); never read localStorage directly. `apiRequest` sends the token only on `/admin` pages (or with `{ auth: true }`) because the API treats any Bearer header as "show drafts"; concurrent 401s share one refresh. Log out with `logout()` from `@/lib/api`.
-- `src/lib/cms-store.ts` is the legacy localStorage CMS (mostly superseded by the API) — don't build new features on it. The README's "localStorage" backend-integration section is outdated for the same reason.
+- Site images come from `useMedia(slot)` (`src/hooks/use-media.ts`): the admin's choice from `GET /cms/media-registry` (set via "Use on the site as" in Admin → Media), else the bundled image. The README's "localStorage" backend-integration section is outdated (the legacy localStorage CMS was removed).
 - `@/` alias → `src/`. `src/components/ui/` are generated shadcn primitives (`components.json`); admin-specific shared components are in `src/components/admin/`.
 
 ## Docs

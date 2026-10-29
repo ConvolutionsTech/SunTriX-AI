@@ -9,6 +9,7 @@ import {
   Grid3X3, List, X, ExternalLink, Eye, ArrowUpDown, Filter,
   CheckSquare, Square, Download, Folder, Sparkles, AlertCircle
 } from "lucide-react";
+import { MediaSlotPicker } from "@/components/admin/MediaSlotPicker";
 
 type AssetCategory = "all" | "image" | "video" | "document";
 
@@ -644,6 +645,8 @@ export const AdminMedia = () => {
                   )}
                 </div>
               </div>
+
+              {selectedAsset.type === "image" && <MediaSlotPicker url={selectedAsset.url} />}
 
               {/* Direct Actions */}
               <div className="space-y-2 pt-4 border-t border-border">
