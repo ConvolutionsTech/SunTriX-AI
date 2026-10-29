@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction, Request } from "express";
 import SystemSetting from "../models/SystemSetting";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { updateSettingCache, getSetting } from "../lib/configLoader";
+import { updateSettingCache, getSetting, isEnvOnlySetting } from "../lib/configLoader";
 import AuditLog from "../models/AuditLog";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
 
@@ -55,7 +55,8 @@ router.get("/", requireAuth, async (_req: AuthRequest, res: Response, next: Next
   try {
     const settings = await SystemSetting.find({}).sort({ section: 1, key: 1 }).lean();
 
-    const sanitized = settings.map((s) => ({
+    // Env-only keys (secrets) are never returned, even masked
+    const sanitized = settings.filter((s) => !isEnvOnlySetting(s.key)).map((s) => ({
       ...s,
       value: s.isSecret && s.value ? MASKED : s.value,
     }));
@@ -91,6 +92,11 @@ router.patch(
       for (const { key, value } of updates) {
         // Skip if the admin sent back the masked placeholder for a secret field
         if (value === MASKED) continue;
+
+        if (isEnvOnlySetting(key)) {
+          errors.push(`${key}: set via environment, not the settings API`);
+          continue;
+        }
 
         // Model selection validation against discovered catalog
         if (key === "GROQ_CHAT_MODEL" || key === "GROQ_EXTRACT_MODEL") {
@@ -150,6 +156,10 @@ router.patch(
     try {
       const { key } = req.params;
       const { value } = req.body as { value: string };
+
+      if (isEnvOnlySetting(key)) {
+        return res.status(403).json({ error: `${key} must be set via environment, not the settings API` });
+      }
 
       if (value === undefined || value === null) {
         return res.status(400).json({ error: "value is required" });

@@ -104,18 +104,31 @@ export const DEFAULT_SYSTEM_SETTINGS = [
   },
 ];
 
+// ─── Env-only settings ─────────────────────────────────────────────────────
+// Secrets and auth parameters come from the environment only. DB rows for these
+// keys are ignored at load time, and the settings API can neither read nor write them.
+const ENV_ONLY_PREFIXES = ["JWT_", "STRIPE_"];
+const ENV_ONLY_KEYS = new Set(["RESEND_API_KEY", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "MONGODB_URI"]);
+
+export function isEnvOnlySetting(key: string): boolean {
+  return ENV_ONLY_KEYS.has(key) || ENV_ONLY_PREFIXES.some((p) => key.startsWith(p));
+}
+
 // ─── In-memory cache (key → value) ─────────────────────────────────────────
 const cache: Record<string, string> = {};
 
-// ─── Read a setting (cache → process.env → fallback) ───────────────────────
+// ─── Read a setting (cache → process.env → fallback; env-only keys skip the cache) ─
 export function getSetting(key: string, fallback = ""): string {
-  if (cache[key] !== undefined) return cache[key];
+  if (!isEnvOnlySetting(key) && cache[key] !== undefined) return cache[key];
   if (process.env[key] !== undefined && process.env[key] !== "") return process.env[key]!;
   return fallback;
 }
 
 // ─── Update cache + process.env (called after DB update/upsert) ────────────
 export function updateSettingCache(key: string, value: string): void {
+  if (isEnvOnlySetting(key)) {
+    throw new Error(`${key} is env-only and cannot be changed at runtime`);
+  }
   cache[key] = value;
   process.env[key] = value;
 }
@@ -137,6 +150,13 @@ export async function loadSettingsFromDB(): Promise<void> {
     // 2. Load all settings into in-memory cache
     const settings = await SystemSetting.find({});
     for (const s of settings) {
+      if (isEnvOnlySetting(s.key)) {
+        console.warn(
+          `⚠️  Ignoring DB value for env-only setting ${s.key}` +
+            (process.env[s.key] ? "" : " — it is NOT set in the environment either")
+        );
+        continue;
+      }
       if (s.value !== undefined) {
         cache[s.key] = s.value;
         process.env[s.key] = s.value;

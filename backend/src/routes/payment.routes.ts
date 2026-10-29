@@ -3,6 +3,7 @@ import { paymentService } from "../modules/payments/payment.service";
 import { requireAuth } from "../middleware/auth";
 import { validate, InvoiceCreateSchema } from "../middleware/validate";
 import { logAudit } from "../lib/audit";
+import { AppError } from "../shared/errors/appError";
 
 const router = Router();
 
@@ -50,6 +51,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     console.error("Stripe Webhook Error:", err.message);
+    // Misconfiguration → 500 so Stripe retries once fixed; bad signature/payload → 400
+    if (err instanceof AppError && err.statusCode >= 500) {
+      return res.status(err.statusCode).send("Webhook Error: server misconfigured");
+    }
     res.status(400).send(`Webhook Error: ${err.message}`);
   }
 });

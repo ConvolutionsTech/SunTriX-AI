@@ -1,16 +1,24 @@
 import Stripe from "stripe";
 import { getSetting } from "../../lib/configLoader";
+import { AppError, ERROR_CODES } from "../../shared/errors/appError";
 
 export class StripeAdapter {
   getClient(): InstanceType<typeof Stripe> {
-    const secretKey = getSetting("STRIPE_SECRET_KEY") || "sk_test_placeholder";
+    const secretKey = getSetting("STRIPE_SECRET_KEY");
+    if (!secretKey) {
+      throw new AppError("Stripe is not configured (STRIPE_SECRET_KEY missing)", ERROR_CODES.INTERNAL_SERVER_ERROR);
+    }
     return new Stripe(secretKey, { apiVersion: "2025-02-24.acacia" as any });
   }
 
   async constructWebhookEvent(payload: string | Buffer, signature: string): Promise<any> {
-    const client = this.getClient();
-    const webhookSecret = getSetting("STRIPE_WEBHOOK_SECRET") || "";
-    return client.webhooks.constructEvent(payload, signature, webhookSecret);
+    // stripe-node accepts events signed with an empty secret, so an unset secret
+    // would let anyone forge events. Fail closed instead.
+    const webhookSecret = getSetting("STRIPE_WEBHOOK_SECRET");
+    if (!webhookSecret || !webhookSecret.startsWith("whsec_")) {
+      throw new AppError("Stripe webhook secret is not configured", ERROR_CODES.INTERNAL_SERVER_ERROR);
+    }
+    return this.getClient().webhooks.constructEvent(payload, signature, webhookSecret);
   }
 
   async createCheckoutSession(params: {
