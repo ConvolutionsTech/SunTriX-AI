@@ -9,6 +9,27 @@ export class PaymentRepository {
     return Payment.findOne({ invoiceToken });
   }
 
+  /** Takes the checkout lock for a pending invoice (or a lock older than `staleMs`). */
+  async acquireCheckoutLock(invoiceToken: string, at: Date, staleMs: number): Promise<IPayment | null> {
+    return Payment.findOneAndUpdate(
+      {
+        invoiceToken,
+        status: "pending",
+        $or: [{ checkoutLock: null }, { checkoutLock: { $lt: new Date(at.getTime() - staleMs) } }],
+      },
+      { $set: { checkoutLock: at } },
+      { new: true }
+    );
+  }
+
+  async storeCheckoutSession(id: unknown, stripeSessionId: string, sessionExpiresAt: Date): Promise<void> {
+    await Payment.updateOne({ _id: id }, { $set: { stripeSessionId, sessionExpiresAt, checkoutLock: null } });
+  }
+
+  async releaseCheckoutLock(id: unknown): Promise<void> {
+    await Payment.updateOne({ _id: id }, { $set: { checkoutLock: null } });
+  }
+
   async findByStripeSessionId(stripeSessionId: string): Promise<IPayment | null> {
     return Payment.findOne({ stripeSessionId });
   }

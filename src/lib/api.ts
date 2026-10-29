@@ -204,7 +204,7 @@ export const ENDPOINTS = {
   PAYMENT_INVOICE: (token: string) => `${BASE_URL}/payments/invoice/${token}`,
   PAYMENT_ADMIN_LIST: `${BASE_URL}/payments/admin/list`,
   PAYMENT_ADMIN_STATS: `${BASE_URL}/payments/admin/stats`,
-  PAYMENT_ADMIN_CREATE_INVOICE: `${BASE_URL}/payments/admin/create-invoice`,
+  PAYMENT_ADMIN_CREATE_INVOICE: `${BASE_URL}/payments/admin/invoice`,
   PAYMENT_ADMIN_REFUND: (id: string) => `${BASE_URL}/payments/admin/refund/${id}`,
 
   // Proposals

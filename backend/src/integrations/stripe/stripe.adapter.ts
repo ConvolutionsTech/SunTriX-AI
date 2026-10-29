@@ -29,6 +29,11 @@ export class StripeAdapter {
     metadata: Record<string, string>;
     successUrl: string;
     cancelUrl: string;
+    /** Session lifetime (Stripe accepts 30 min – 24 h from now) */
+    expiresAt?: Date;
+    clientReferenceId?: string;
+    /** Same key → Stripe returns the same session instead of creating another */
+    idempotencyKey?: string;
   }): Promise<{ id: string; url: string | null }> {
     const client = this.getClient();
     const session = await client.checkout.sessions.create({
@@ -48,9 +53,21 @@ export class StripeAdapter {
       metadata: params.metadata,
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
-    });
+      ...(params.expiresAt && { expires_at: Math.floor(params.expiresAt.getTime() / 1000) }),
+      ...(params.clientReferenceId && { client_reference_id: params.clientReferenceId }),
+    }, params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined);
 
     return { id: session.id, url: session.url };
+  }
+
+  async retrieveCheckoutSession(id: string): Promise<{ id: string; url: string | null; status: string | null }> {
+    const session = await this.getClient().checkout.sessions.retrieve(id);
+    return { id: session.id, url: session.url, status: session.status };
+  }
+
+  /** Expires an open session so it can no longer be paid (ignored if already complete/expired). */
+  async expireCheckoutSession(id: string): Promise<void> {
+    await this.getClient().checkout.sessions.expire(id).catch(() => {});
   }
 
   async createRefund(paymentIntentId: string, amountCents?: number, reason?: string): Promise<any> {

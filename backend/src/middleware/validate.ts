@@ -195,9 +195,12 @@ export const ContactReplySchema = z.object({
 
 // POST /payments/admin/create-invoice
 export const InvoiceCreateSchema = z.object({
-  taskRequestId: z.string().optional().nullable(),
-  clientEmail: email,
+  taskRequestId: z.string().regex(/^[a-f\d]{24}$/i, "taskRequestId is required"),
+  clientEmail: email.optional(),
   clientName: optStr,
-  amountUSD: z.number().min(1, "Amount must be between $1 and $999,999").max(999999, "Amount must be between $1 and $999,999"),
+  // Integer cents (lib/money.ts): $1.00 – $999,999.00
+  amountCents: z.number().int("Amount must be whole cents").min(100, "Amount must be at least $1.00").max(99_999_900, "Amount must be at most $999,999.00"),
+  currency: z.enum(["usd"]).optional().default("usd"),
+  expiresInDays: z.number().int().min(1).max(90).optional().default(14),
   description: shortStr("Description"),
 });

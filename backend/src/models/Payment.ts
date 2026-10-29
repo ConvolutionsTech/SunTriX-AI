@@ -20,6 +20,8 @@ export interface IPayment extends Document {
   trackingToken: string;   // links back to the TaskRequest tracker
   receiptUrl: string;      // Stripe hosted receipt URL
   expiresAt?: Date;        // invoice expiry (30 days from creation)
+  sessionExpiresAt?: Date;
+  checkoutLock?: Date | null;
   refundId: string;
   refundedAt?: Date;
   refundReason: string;
@@ -51,6 +53,10 @@ const PaymentSchema = new Schema<IPayment>(
     trackingToken: { type: String, default: "" },
     receiptUrl:    { type: String, default: "" },
     expiresAt:     { type: Date },
+    // Open Stripe Checkout session for this invoice (reused instead of creating duplicates)
+    sessionExpiresAt: { type: Date },
+    // Short-lived lock while a checkout session is being created
+    checkoutLock:     { type: Date, default: null },
 
     refundId:     { type: String, default: "" },
     refundedAt:   { type: Date },
