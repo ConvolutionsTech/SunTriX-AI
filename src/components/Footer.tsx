@@ -167,8 +167,9 @@ const Footer = () => {
               © {new Date().getFullYear()} {companyName}
             </p>
             <div className="flex items-center gap-6">
-              <Link to="/legal" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Privacy</Link>
-              <Link to="/legal" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Terms</Link>
+              <Link to="/legal/privacy" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Privacy</Link>
+              <Link to="/legal/terms" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Terms</Link>
+              <Link to="/legal/cookies" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors font-bold">Cookies</Link>
             </div>
           </div>
           
