@@ -9,6 +9,8 @@ import "./CmsContent";
 import "./ContactMessage";
 import "./Contract";
 import "./Department";
+import "./JobRun";
+import "./SchedulerLock";
 import "./EmailLog";
 import "./MediaAsset";
 import "./Newsletter";

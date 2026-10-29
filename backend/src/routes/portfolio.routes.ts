@@ -8,6 +8,19 @@ import slugify from "slugify";
 
 const router = Router();
 
+/**
+ * A future publishAt on a draft means "scheduled"; publishing clears it. An
+ * item that is later un-published keeps status draft and is never re-published.
+ */
+function applySchedule(body: Record<string, any>, existing?: { status?: string; publishAt?: Date | null }): void {
+  const publishAt = body.publishAt !== undefined ? (body.publishAt ? new Date(body.publishAt) : null) : existing?.publishAt ?? null;
+  const status = body.status ?? existing?.status;
+  const future = publishAt !== null && publishAt.getTime() > Date.now();
+  if (status === "scheduled" && !future) throw createError("Pick a future publish date to schedule this item", 400);
+  if (future && body.status === undefined && (existing?.status ?? "draft") === "draft") body.status = "scheduled";
+  if (body.status === "published") body.publishAt = null;
+}
+
 // GET /portfolio  — public lists published; admin sees all
 router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -72,7 +85,11 @@ router.post("/bulk/import", requireAuth, bulkItems(Portfolio), async (req: Reque
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
     
     // Add default slugs
-    const preparedItems = items.map((item: any) => ({
+    const preparedItems = items.map((item: any) => {
+      const prepared = { ...item };
+      applySchedule(prepared);
+      return prepared;
+    }).map((item: any) => ({
       ...item,
       slug: item.slug || slugify(item.title || "untitled", { lower: true, strict: true }) + "-" + Math.random().toString(36).slice(-4)
     }));
@@ -96,6 +113,7 @@ router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: N
 router.post("/", requireAuth, writable(Portfolio), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = { ...req.body };
+    applySchedule(body);
     if (!body.slug) body.slug = slugify(body.title || "untitled", { lower: true, strict: true });
     const project = await Portfolio.create(body);
     await logAudit(req, "create", "portfolio", project._id.toString(), project.title);
@@ -109,7 +127,11 @@ router.post("/", requireAuth, writable(Portfolio), async (req: Request, res: Res
 // PUT /portfolio/:id  — admin only
 router.put("/:id", requireAuth, writable(Portfolio), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const project = await Portfolio.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const existing = await Portfolio.findById(req.params.id).select("status publishAt").lean();
+    if (!existing) return next(createError("Project not found", 404));
+    const body = { ...req.body };
+    applySchedule(body, existing);
+    const project = await Portfolio.findByIdAndUpdate(req.params.id, body, { new: true, runValidators: true });
     if (!project) return next(createError("Project not found", 404));
     await logAudit(req, "update", "portfolio", project._id.toString(), project.title);
     res.json(project);

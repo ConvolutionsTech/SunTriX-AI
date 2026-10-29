@@ -2092,22 +2092,19 @@ Post-payment work that fails after a successful payment is retried every 5 minut
 
 ## 13. Background Jobs & Scheduler
 
-The scheduler starts automatically when the backend boots (`startScheduler()` called in `start()`).
+The scheduler starts automatically when the backend boots (`startScheduler()` in `start()`) and stops on shutdown. With several instances, jobs marked *once per tick* take a lease in `SchedulerLock` so only one instance runs each tick, and every such run is recorded in `JobRun` (kept 30 days) with its result or error. The other jobs are safe to run on every instance.
 
-### Job 1: Auto-Publish Scheduled Content
-- **Schedule:** Every 5 minutes (`*/5 * * * *`)
-- **What it does:**
-  - Queries all `Post` documents with `status: "scheduled"` and `publishAt <= now()`
-  - Sets them to `status: "published"`, records `publishedAt`
-  - Queries all `Portfolio` documents with `status: "draft"` and `publishAt <= now()`
-  - Sets them to `status: "published"`
+| Job | Schedule | Runs on | What it does |
+|---|---|---|---|
+| Settings refresh | every 15 s | every instance | Reloads runtime settings when another instance changed them |
+| Email outbox | every 15 s | every instance (rows claimed atomically) | Delivers queued transactional email with retries (§10.0) |
+| Campaign dispatcher | every 30 s | every instance (campaigns leased) | Sends queued newsletter campaigns, resumes interrupted ones (§5.5) |
+| `reconcile-payments` | every 5 min | once per tick | Finishes post-payment work that failed after a successful payment |
+| `expire-lifecycle` | every 5 min | once per tick | Expires proposals/contracts past `expiresAt`, releases acceptances stuck in `processing`, fails legacy broadcasts lost to a restart |
+| `auto-publish` | every 5 min | once per tick | Publishes posts with `status: "scheduled"` and portfolio items with `status: "scheduled"` whose `publishAt` has passed (portfolio `publishAt` is then cleared). A draft is never published automatically, so un-publishing an item sticks. Saving a draft with a future `publishAt` makes it `scheduled`. |
+| `audit-retention` | daily 02:00 | once per tick | Deletes audit entries older than `AUDIT_LOG_RETENTION_DAYS` (default 90) |
 
-### Job 2: Audit Log Retention Cleanup
-- **Schedule:** Daily at 2:00 AM (`0 2 * * *`)
-- **What it does:**
-  - Reads `AUDIT_LOG_RETENTION_DAYS` from settings (default: 90)
-  - Deletes all `AuditLog` entries older than that cutoff date
-  - If retention days = 0, keeps all logs forever
+Invoices are not expired by a job: an invoice past `expiresAt` refuses checkout with `410`.
 
 ---
 
