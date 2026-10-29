@@ -5,7 +5,7 @@ import { z } from "zod";
  * so this is the single place that decides whether the server may boot.
  * Error messages name the variable but never echo its value.
  */
-const nonEmpty = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
+const nonEmpty = (name: string) => z.string({ error: `${name} is required` }).trim().min(1, `${name} is required`);
 
 const PRODUCTION_REQUIRED = [
   "STRIPE_SECRET_KEY",
@@ -34,12 +34,12 @@ export const EnvSchema = z
   })
   .superRefine((env, ctx) => {
     if (env.JWT_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["JWT_REFRESH_SECRET"], message: "JWT_REFRESH_SECRET must differ from JWT_SECRET" });
+      ctx.addIssue({ code: "custom", path: ["JWT_REFRESH_SECRET"], message: "JWT_REFRESH_SECRET must differ from JWT_SECRET" });
     }
     if (env.NODE_ENV !== "production") return;
     for (const key of PRODUCTION_REQUIRED) {
       if (!env[key]) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required in production` });
+        ctx.addIssue({ code: "custom", path: [key], message: `${key} is required in production` });
       }
     }
   });

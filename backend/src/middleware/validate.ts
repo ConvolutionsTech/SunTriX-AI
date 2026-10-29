@@ -9,7 +9,7 @@ export function validate<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => ({
+      const errors = result.error.issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));
@@ -81,7 +81,7 @@ export const ProposalRequestChangesSchema = z.object({
 // POST /contracts/:token/sign
 export const ContractSignSchema = z.object({
   clientSignatureName: z.string().trim().min(2, "Please type your full name").max(120, "Name too long"),
-  agreed: z.literal(true, { errorMap: () => ({ message: "You must agree to the contract terms" }) }),
+  agreed: z.literal(true, { error: "You must agree to the contract terms" }),
 });
 
 // POST /tracker/client/:token/chat (and admin chat)
