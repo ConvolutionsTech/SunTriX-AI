@@ -30,9 +30,12 @@ router.post("/:token/sign", validate(ContractSignSchema), async (req: Request, r
 
     res.json({
       message: "Contract signed successfully! Your project workspace has been set up.",
-      contract: result.contract,
+      contract: {
+        status: result.contract.status,
+        signedAt: result.contract.signedAt,
+        clientSignatureName: result.contract.clientSignatureName,
+      },
       trackerToken: result.trackerToken,
-      checkoutUrl: result.checkoutUrl,
     });
   } catch (err) {
     next(err);

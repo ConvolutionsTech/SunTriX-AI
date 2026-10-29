@@ -5,7 +5,6 @@ import { AppError, ERROR_CODES } from "../../shared/errors/appError";
 import { IContract, SignContractDTO } from "./contract.types";
 import { getSetting } from "../../lib/configLoader";
 import { sendContractSignedNotification } from "../../services/email";
-import Proposal from "../../models/Proposal";
 
 export class ContractService {
   constructor(
@@ -24,62 +23,54 @@ export class ContractService {
     return contract;
   }
 
-  async signContract(dto: SignContractDTO): Promise<{ contract: IContract; trackerToken: string; checkoutUrl: string }> {
+  /**
+   * Client signs. The task moves first (contract_sent → contract_signed), then the
+   * contract is marked signed atomically; a concurrent or repeated sign gets 409
+   * and sends nothing. The project tracker is created here from the proposal.
+   */
+  async signContract(dto: SignContractDTO): Promise<{ contract: IContract; trackerToken: string }> {
     const existing = await this.contractRepo.findByToken(dto.token);
     if (!existing) throw new AppError("Contract not found", ERROR_CODES.NOT_FOUND);
-
-    let contract = existing;
-    if (contract.status === "pending") {
-      const signed = await this.contractRepo.markSigned(
-        existing._id.toString(),
-        dto.clientSignatureName,
-        dto.clientIp,
-        dto.userAgent
-      );
-      if (signed) contract = signed;
+    if (existing.status === "signed") throw new AppError("This contract has already been signed.", ERROR_CODES.CONFLICT);
+    if (existing.status === "expired" || existing.expiresAt <= new Date()) {
+      throw new AppError("This contract link has expired. Please contact us.", 410);
     }
 
-    const taskRequestId = contract.taskRequestId._id ? contract.taskRequestId._id.toString() : contract.taskRequestId.toString();
-    const proposalId = contract.proposalId._id ? contract.proposalId._id.toString() : contract.proposalId.toString();
+    const task = existing.taskRequestId as any;
+    const proposal = existing.proposalId as any;
+    if (!task?._id || task.deletedAt || !proposal?._id) {
+      throw new AppError("This engagement is no longer available. Please contact us.", 410);
+    }
+    const taskRequestId = task._id.toString();
 
     await this.taskService.transitionStatus(taskRequestId, "contract_signed", "client");
 
-    const proposal = await Proposal.findById(proposalId).lean() as any;
-    const initialPhases = (proposal?.milestones || []).map((m: any, idx: number) => ({
-      phaseNumber: idx + 1,
-      title: m.title,
-      description: m.description || "",
-      status: idx === 0 ? "in_progress" : "pending",
-      dueWeek: m.dueWeek || idx + 1,
-    }));
+    const contract = await this.contractRepo.markSigned(existing._id.toString(), dto.clientSignatureName, dto.clientIp, dto.userAgent);
+    if (!contract) throw new AppError("This contract has already been signed.", ERROR_CODES.CONFLICT);
 
-    const initialDeliverables = (proposal?.scopeItems || []).map((item: string) => ({
-      title: item,
-      status: "Pending",
-    }));
-
-    const tracker = await this.projectRepo.findOrCreateTracker(taskRequestId, proposalId, {
-      clientName: contract.clientName,
-      clientEmail: contract.clientEmail,
-      projectTitle: contract.projectTitle,
-      phases: initialPhases,
-      deliverables: initialDeliverables,
-      status: "active",
+    const now = Date.now();
+    const tracker = await this.projectRepo.findOrCreateTracker(taskRequestId, proposal._id.toString(), {
+      currentPhase: "Discovery",
+      phases: [{ name: "Discovery", enteredAt: new Date(now) }],
+      milestones: (proposal.milestones || []).map((m: any, idx: number) => ({
+        title: m.title,
+        amount: m.amount, // cents
+        linkedPhase: "Discovery",
+        dueDate: new Date(now + (m.dueWeek || idx + 1) * 7 * 86400000),
+      })),
+      deliverables: (proposal.scopeItems || []).map((title: string) => ({ title, status: "Pending" })),
     });
 
     const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
-    const checkoutUrl = `${appUrl}/checkout?taskToken=${(contract.taskRequestId as any).trackingToken || ""}&contract=${contract.contractToken}`;
-
-    const adminUrl = `${appUrl}/admin/tasks`;
     sendContractSignedNotification({
       projectTitle: contract.projectTitle,
       clientName: contract.clientName,
       clientEmail: contract.clientEmail,
       signedAt: (contract.signedAt || new Date()).toISOString(),
-      adminUrl,
+      adminUrl: `${appUrl}/admin/tasks`,
     }).catch(console.error);
 
-    return { contract, trackerToken: tracker.trackerToken, checkoutUrl };
+    return { contract, trackerToken: tracker.trackerToken };
   }
 }
 
