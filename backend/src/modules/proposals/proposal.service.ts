@@ -95,6 +95,8 @@ export class ProposalService {
       await this.taskService.transitionStatus(taskId, "in_review", "admin", "Proposal send aborted").catch(() => {});
       throw new AppError("The proposal was changed by someone else — reload and try again.", ERROR_CODES.CONFLICT);
     }
+    // A revised proposal replaces earlier ones — they can no longer be accepted
+    await this.proposalRepo.supersedeOthers(taskId, id);
 
     const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
     const proposalUrl = `${appUrl}/proposal/${proposal.proposalToken}`;

@@ -13,6 +13,10 @@ export class ContractService {
     private taskService: TaskRequestService = taskRequestService
   ) {}
 
+  async listForTask(taskRequestId: string): Promise<IContract[]> {
+    return this.contractRepo.findByTask(taskRequestId);
+  }
+
   async getByToken(token: string): Promise<IContract> {
     const contract = await this.contractRepo.findByToken(token);
     if (!contract) throw new AppError("Contract not found", ERROR_CODES.NOT_FOUND);

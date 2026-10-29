@@ -211,6 +211,7 @@ export const ENDPOINTS = {
   PROPOSAL_ADMIN_AI_DRAFT:   `${BASE_URL}/proposals/admin/ai-draft`,
   PROPOSAL_ADMIN_CREATE:     `${BASE_URL}/proposals`,
   PROPOSAL_ADMIN_BY_TASK: (taskId: string) => `${BASE_URL}/proposals/admin/by-task/${taskId}`,
+  PROPOSAL_ADMIN_SEND: (id: string) => `${BASE_URL}/proposals/${id}/send`,
   PROPOSAL_BY_TOKEN:      (token: string)  => `${BASE_URL}/proposals/view/${token}`,
   PROPOSAL_ACCEPT:        (token: string)  => `${BASE_URL}/proposals/accept/${token}`,
   PROPOSAL_REQUEST_CHANGES: (token: string) => `${BASE_URL}/proposals/request-changes/${token}`,

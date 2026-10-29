@@ -13,6 +13,14 @@ export class ProposalRepository {
     return Proposal.findById(id);
   }
 
+  /** Marks the request's other open proposals as superseded so only the latest can be accepted. */
+  async supersedeOthers(taskRequestId: string, keepId: string): Promise<void> {
+    await Proposal.updateMany(
+      { taskRequestId, _id: { $ne: keepId }, status: { $in: ["draft", "sent", "changes_requested", "expired"] } },
+      { $set: { status: "rejected" } }
+    );
+  }
+
   async findByTask(taskRequestId: string): Promise<IProposal[]> {
     return Proposal.find({ taskRequestId }).sort({ createdAt: -1 });
   }

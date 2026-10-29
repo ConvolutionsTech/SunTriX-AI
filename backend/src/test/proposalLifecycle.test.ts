@@ -142,3 +142,36 @@ describe("proposal lifecycle guards (A18, M34, M35, M38, N-LC-1)", () => {
     expect((await Contract.findById(contract._id))?.status).toBe("expired");
   });
 });
+
+describe("revisions and admin lookups (T-FE-6)", () => {
+  beforeAll(async () => {
+    await connectTestDb();
+  }, 120000);
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await clearTestDb();
+  });
+
+  afterAll(async () => {
+    await disconnectTestDb();
+  });
+
+  it("sending a revision supersedes the earlier proposal so only the latest can be accepted", async () => {
+    vi.spyOn(email, "sendProposalEmail").mockResolvedValue();
+    const { task, proposal: old } = await seed("in_review", { status: "changes_requested" });
+    const revision = await Proposal.create({
+      proposalToken: "prop_revision", taskRequestId: task._id, clientEmail: "ada@client.test", title: "Agent build v2",
+      totalAmount: 400_000, milestones: [{ title: "All", amount: 400_000 }], status: "draft", expiresAt: new Date(Date.now() + 7 * DAY),
+    });
+
+    const auth = { Authorization: `Bearer ${await staffToken("admin")}` };
+    expect((await request(app).post(`/v1/proposals/${revision._id}/send`).set(auth)).status).toBe(200);
+    expect((await Proposal.findById(old._id))?.status).toBe("rejected");
+    expect((await accept(old.proposalToken)).status).toBe(409);
+
+    const contracts = await request(app).get(`/v1/contracts/admin/by-task/${task._id}`).set(auth);
+    expect(contracts.status).toBe(200);
+    expect(contracts.body.contracts).toEqual([]);
+  });
+});

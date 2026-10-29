@@ -1,8 +1,18 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { contractService } from "../modules/contracts/contract.service";
 import { validate, ContractSignSchema } from "../middleware/validate";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+
+// GET /contracts/admin/by-task/:taskId — contracts for a request, newest first (admin workspace)
+router.get("/admin/by-task/:taskId", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ contracts: await contractService.listForTask(req.params.taskId) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /contracts/:token — PUBLIC client views contract
 router.get("/:token", async (req: Request, res: Response, next: NextFunction) => {

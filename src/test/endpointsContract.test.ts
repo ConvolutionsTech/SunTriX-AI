@@ -39,7 +39,6 @@ const KNOWN_MISSING = new Set<string>([
   "PAYMENT_ADMIN_LIST", // T-FE-5
   "PAYMENT_ADMIN_STATS", // T-FE-5
   "PAYMENT_ADMIN_REFUND", // T-LC-6
-  "CONTRACT_ADMIN_BY_TASK", // T-FE-6
 ]);
 
 describe("frontend ENDPOINTS match backend routes", () => {
