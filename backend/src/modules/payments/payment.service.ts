@@ -7,7 +7,10 @@ import { CreateInvoiceDTO, IPayment } from "./payment.types";
 import { getSetting } from "../../lib/configLoader";
 import { formatMoney } from "../../lib/money";
 import TaskRequest from "../../models/TaskRequest";
-import { sendPaymentConfirmation, sendInvoiceEmail } from "../../services/email";
+import { sendPaymentConfirmation, sendInvoiceEmail, sendAdminAlert } from "../../services/email";
+import Payment from "../../models/Payment";
+import ProjectTracker from "../../models/ProjectTracker";
+import WebhookEvent from "../../models/WebhookEvent";
 
 const INVOICEABLE = ["contract_signed", "in_progress"];
 const CHECKOUT_LOCK_MS = 60_000;
@@ -20,6 +23,38 @@ export class PaymentService {
     private taskService: TaskRequestService = taskRequestService,
     private stripe: StripeAdapter = stripeAdapter
   ) {}
+
+  /**
+   * The pending Payment for a tracker milestone, created on first request, so
+   * milestone checkout gets the same session reuse, locking and webhook path
+   * as invoices.
+   */
+  async milestonePayment(trackerId: string, milestoneId: string): Promise<IPayment> {
+    const existing = await Payment.findOne({ trackerId, milestoneId, status: { $in: ["pending", "paid"] } });
+    if (existing) return existing;
+
+    const tracker = await ProjectTracker.findById(trackerId);
+    const milestone = tracker?.milestones.id(milestoneId);
+    if (!tracker || !milestone) throw new AppError("Milestone not found", ERROR_CODES.NOT_FOUND);
+    const task = await TaskRequest.findById(tracker.taskRequestId).lean();
+    if (!task) throw new AppError("Project request not found", ERROR_CODES.NOT_FOUND);
+
+    return this.paymentRepo.create({
+      type: "milestone",
+      trackerId,
+      milestoneId,
+      taskRequestId: tracker.taskRequestId,
+      trackingToken: task.trackingToken,
+      clientEmail: task.email,
+      clientName: task.name,
+      description: `${task.projectTitle || "Project"} — ${milestone.title}`,
+      amount: milestone.amount,
+      currency: "usd",
+      invoiceToken: `inv_${crypto.randomBytes(16).toString("hex")}`,
+      expiresAt: new Date(Date.now() + 30 * 86400000),
+      status: "pending",
+    });
+  }
 
   /** Admin bills a signed engagement. Only for requests whose contract is signed. */
   async createInvoice(dto: CreateInvoiceDTO): Promise<{ payment: IPayment; invoiceUrl: string }> {
@@ -105,6 +140,12 @@ export class PaymentService {
 
       const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
       const sessionExpiresAt = new Date(now + SESSION_TTL_MS);
+      // Milestone payments return to the client's project hub; invoices to the success page
+      const tracker = locked.type === "milestone" && locked.trackerId ? await ProjectTracker.findById(locked.trackerId).select("trackerToken").lean() : null;
+      const successUrl = tracker
+        ? `${appUrl}/client/project/${tracker.trackerToken}?paid=1`
+        : `${appUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}&invoiceToken=${locked.invoiceToken}`;
+      const cancelUrl = tracker ? `${appUrl}/client/project/${tracker.trackerToken}` : `${appUrl}/invoice/${locked.invoiceToken}?canceled=true`;
       const session = await this.stripe.createCheckoutSession({
         clientEmail: locked.clientEmail,
         description: locked.description,
@@ -115,8 +156,8 @@ export class PaymentService {
           taskRequestId: locked.taskRequestId ? locked.taskRequestId.toString() : "",
           paymentType: locked.type,
         },
-        successUrl: `${appUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}&invoiceToken=${locked.invoiceToken}`,
-        cancelUrl: `${appUrl}/invoice/${locked.invoiceToken}?canceled=true`,
+        successUrl,
+        cancelUrl,
         expiresAt: sessionExpiresAt,
         clientReferenceId: locked.invoiceToken,
         idempotencyKey: `${locked.invoiceToken}:${lockedAt.getTime()}`,
@@ -131,46 +172,136 @@ export class PaymentService {
     }
   }
 
-  async handlePaymentPaidSideEffects(payment: IPayment): Promise<void> {
-    if (payment.taskRequestId) {
-      const taskReqId = payment.taskRequestId.toString();
-      const task = await TaskRequest.findById(taskReqId);
-      if (task && (payment.type === "invoice" || payment.type === "subscription")) {
-        if (task.status === "contract_signed" || task.status === "contract_sent") {
-          await this.taskService.transitionStatus(taskReqId, "in_progress", "system", `Paid invoice: ${payment.description}`);
-        }
+  /**
+   * Post-payment work, safe to run more than once: starts the project (invoice)
+   * or marks the tracker milestone paid (milestone), emails the client, then
+   * records completion. Throws on failure so the webhook / reconciler retries.
+   */
+  async runPaidSideEffects(payment: IPayment): Promise<void> {
+    if (payment.sideEffectsDone) return;
+    const appUrl = getSetting("FRONTEND_URL", "http://localhost:5173");
+    let trackingUrl = payment.trackingToken ? `${appUrl}/track/${payment.trackingToken}` : "";
+
+    if (payment.type === "milestone" && payment.trackerId && payment.milestoneId) {
+      const tracker = await ProjectTracker.findOneAndUpdate(
+        { _id: payment.trackerId, milestones: { $elemMatch: { _id: payment.milestoneId, paidAt: null } } },
+        {
+          $set: {
+            "milestones.$.paidAt": payment.paidAt || new Date(),
+            "milestones.$.stripePaymentIntentId": payment.stripePaymentIntentId,
+            "milestones.$.invoiceId": payment._id,
+          },
+        },
+        { new: true }
+      );
+      const current = tracker ?? (await ProjectTracker.findById(payment.trackerId));
+      if (current) trackingUrl = `${appUrl}/client/project/${current.trackerToken}`;
+    } else if (payment.taskRequestId) {
+      const taskId = payment.taskRequestId.toString();
+      const task = await TaskRequest.findById(taskId);
+      if (task?.status === "contract_signed") {
+        await this.taskService.transitionStatus(taskId, "in_progress", "system", `Paid invoice: ${payment.description}`);
+      } else if (task && !["in_progress", "completed"].includes(task.status)) {
+        // e.g. paid after the engagement was cancelled — needs a human
+        await sendAdminAlert({
+          subject: "Payment received for an inactive engagement",
+          message: `${formatMoney(payment.amount, payment.currency)} from ${payment.clientEmail} for "${payment.description}" was paid while the request is "${task.status}". Review and refund if needed.`,
+          adminUrl: `${appUrl}/admin/payments`,
+        });
       }
     }
 
-    sendPaymentConfirmation({
+    await sendPaymentConfirmation({
       clientName: payment.clientName || "Valued Client",
       clientEmail: payment.clientEmail,
       description: payment.description,
-      amountUSD: `$${(payment.amount / 100).toFixed(2)}`,
-      receiptUrl: (payment as any).stripeReceiptUrl || "",
-      paidAt: new Date().toISOString(),
-    }).catch(console.error);
+      amountUSD: formatMoney(payment.amount, payment.currency),
+      receiptUrl: payment.receiptUrl || "",
+      trackingUrl,
+      paidAt: (payment.paidAt || new Date()).toISOString(),
+    });
+
+    await this.paymentRepo.markSideEffectsDone(payment._id);
   }
 
-  async handleStripeWebhookEvent(rawBody: string | Buffer, signature: string): Promise<{ received: boolean; eventType: string }> {
+  /**
+   * Stripe webhook. Each event id is recorded first; an event already processed
+   * is acknowledged without doing anything again. Errors after verification
+   * propagate (→ 500) so Stripe retries the event.
+   */
+  async handleStripeWebhookEvent(rawBody: string | Buffer, signature: string): Promise<{ received: boolean; eventType: string; duplicate?: boolean }> {
     const event = await this.stripe.constructWebhookEvent(rawBody, signature);
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as any;
-      const invoiceToken = session.metadata?.invoiceToken;
-      const stripeSessionId = session.id;
+    const seen = await WebhookEvent.findOneAndUpdate(
+      { _id: event.id },
+      { $setOnInsert: { type: event.type, receivedAt: new Date() } },
+      { upsert: true, new: false }
+    );
+    if (seen?.processedAt) return { received: true, eventType: event.type, duplicate: true };
 
-      const { payment, wasAlreadyPaid } = await this.paymentRepo.claimPaymentPaid(invoiceToken, stripeSessionId, {
-        stripePaymentIntentId: session.payment_intent as string,
-        stripeReceiptUrl: session.payment_intent?.charges?.data[0]?.receipt_url || "",
-      });
+    try {
+      await this.applyEvent(event);
+      await WebhookEvent.updateOne({ _id: event.id }, { $set: { processedAt: new Date() }, $unset: { error: 1 } });
+    } catch (err) {
+      await WebhookEvent.updateOne({ _id: event.id }, { $set: { error: (err as Error).message } }).catch(() => {});
+      throw err;
+    }
+    return { received: true, eventType: event.type };
+  }
 
-      if (payment && !wasAlreadyPaid) {
-        await this.handlePaymentPaidSideEffects(payment);
+  private async applyEvent(event: { type: string; data: { object: any } }): Promise<void> {
+    const obj = event.data.object;
+    switch (event.type) {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
+        if (obj.payment_status !== "paid") return; // e.g. bank debit still processing
+        const paymentIntentId = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id || "";
+        const receiptUrl = await this.stripe.getReceiptUrl(paymentIntentId).catch(() => "");
+        const claimed = await this.paymentRepo.claimPaid(obj.id, obj.metadata?.invoiceToken, { stripePaymentIntentId: paymentIntentId, receiptUrl });
+        const payment = claimed ?? (await this.paymentRepo.findForSession(obj.id, obj.metadata?.invoiceToken));
+        if (payment?.status === "paid") await this.runPaidSideEffects(payment);
+        return;
+      }
+      case "checkout.session.expired":
+        // The invoice stays payable; the next checkout creates a fresh session
+        await Payment.updateOne({ stripeSessionId: obj.id, status: "pending" }, { $unset: { stripeSessionId: 1, sessionExpiresAt: 1 } });
+        return;
+      case "charge.refunded":
+        if (obj.payment_intent) {
+          await Payment.updateOne(
+            { stripePaymentIntentId: obj.payment_intent },
+            { $set: { status: "refunded", refundedAt: new Date(), refundId: obj.refunds?.data?.[0]?.id || "" } }
+          );
+        }
+        return;
+      case "charge.dispute.created": {
+        const payment = obj.payment_intent
+          ? await Payment.findOneAndUpdate({ stripePaymentIntentId: obj.payment_intent }, { $set: { disputed: true } }, { new: true })
+          : null;
+        await sendAdminAlert({
+          subject: "Payment disputed",
+          message: `A ${formatMoney(obj.amount || 0, obj.currency || "usd")} payment${payment ? ` from ${payment.clientEmail} ("${payment.description}")` : ""} was disputed. Reason: ${obj.reason || "not given"}. Respond in the Stripe dashboard before the deadline.`,
+        });
+        return;
+      }
+      default:
+        return; // other event types are acknowledged and ignored
+    }
+  }
+
+  /** Retries post-payment work that didn't finish (called by the scheduler). */
+  async reconcilePaidPayments(olderThanMs = 2 * 60_000): Promise<number> {
+    const stuck = await this.paymentRepo.findPendingSideEffects(new Date(Date.now() - olderThanMs));
+    let done = 0;
+    for (const payment of stuck) {
+      try {
+        await this.runPaidSideEffects(payment);
+        done++;
+      } catch (err) {
+        console.error(`[Payments] Side effects still failing for payment ${payment._id}:`, (err as Error).message);
       }
     }
-
-    return { received: true, eventType: event.type };
+    return done;
   }
 }
 

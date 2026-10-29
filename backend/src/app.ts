@@ -146,7 +146,8 @@ app.use((req, res, next) => {
 // ─── Stripe Webhook Raw Body (MUST be before express.json) ──────
 // Only the webhook path gets raw Buffer — everything else gets JSON
 app.use((req, res, next) => {
-  if (req.originalUrl === "/v1/payments/webhook") {
+  // req.path ignores any query string Stripe may be configured with
+  if (req.path === "/v1/payments/webhook") {
     express.raw({ type: "application/json" })(req, res, next);
   } else {
     next();

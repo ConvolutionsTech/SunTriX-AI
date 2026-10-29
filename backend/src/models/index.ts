@@ -21,3 +21,4 @@ import "./TaskRequest";
 import "./Team";
 import "./Testimonial";
 import "./TrackerMessage";
+import "./WebhookEvent";

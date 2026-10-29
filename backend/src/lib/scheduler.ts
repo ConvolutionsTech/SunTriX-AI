@@ -26,6 +26,17 @@ export async function expireLifecycleDocuments(now = new Date()): Promise<void> 
 }
 
 export function startScheduler(): void {
+  // ── Every 5 minutes: finish post-payment work that failed the first time ───
+  cron.schedule("*/5 * * * *", async () => {
+    try {
+      const { paymentService } = await import("../modules/payments/payment.service");
+      const done = await paymentService.reconcilePaidPayments();
+      if (done > 0) console.log(`[Scheduler] Completed post-payment work for ${done} payment(s)`);
+    } catch (err) {
+      console.error("[Scheduler] Error during payment reconciliation:", err);
+    }
+  });
+
   // ── Every 5 minutes: expire proposals/contracts, release stuck acceptances ─
   cron.schedule("*/5 * * * *", () => {
     expireLifecycleDocuments().catch((err) => console.error("[Scheduler] Error during lifecycle expiry:", err));

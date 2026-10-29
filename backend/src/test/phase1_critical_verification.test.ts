@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
 import request from "supertest";
 import Stripe from "stripe";
+import { stripeAdapter } from "../integrations/stripe/stripe.adapter";
 import app from "../app";
 import TaskRequest from "../models/TaskRequest";
 import Proposal from "../models/Proposal";
@@ -205,6 +206,7 @@ describe("Phase 1 Critical Verification Gate", () => {
       });
 
       const sendEmailSpy = vi.spyOn(emailService, "sendPaymentConfirmation").mockResolvedValue();
+      vi.spyOn(stripeAdapter, "getReceiptUrl").mockResolvedValue("https://pay.stripe.test/receipt");
 
       // Mock Stripe webhook signature validation to succeed
       const mockEvent = {
@@ -213,6 +215,7 @@ describe("Phase 1 Critical Verification Gate", () => {
         data: {
           object: {
             id: payment.stripeSessionId,
+            payment_status: "paid",
             payment_intent: `pi_test_${Date.now()}`,
             customer: "cus_test_123",
             metadata: { invoiceToken },
@@ -244,7 +247,16 @@ describe("Phase 1 Critical Verification Gate", () => {
       expect(sendEmailSpy.mock.calls.length).toBe(firstEmailCalls);
     });
 
-    // Not handled yet: `expired` is not in the Payment status enum. Enabled by T-LC-5.
-    it.todo("should handle checkout.session.expired event by updating payment status to expired");
+    it("checkout.session.expired clears the dead session; the invoice stays payable", async () => {
+      const payment = await Payment.create({
+        invoiceToken: `inv_exp_${Date.now()}`, clientEmail: "exp@suntrix.com", description: "Expired session", amount: 200,
+        currency: "USD", type: "invoice", status: "pending", stripeSessionId: "cs_expired_1", sessionExpiresAt: new Date(),
+      });
+      const res = await postSignedWebhook({ id: `evt_exp_${Date.now()}`, type: "checkout.session.expired", data: { object: { id: "cs_expired_1" } } });
+      expect(res.status).toBe(200);
+      const rechecked = await Payment.findById(payment._id);
+      expect(rechecked?.status).toBe("pending");
+      expect(rechecked?.stripeSessionId).toBeUndefined();
+    });
   });
 });

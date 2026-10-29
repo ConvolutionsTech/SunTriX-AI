@@ -58,6 +58,7 @@ beforeEach(() => {
   });
   vi.spyOn(stripeAdapter, "retrieveCheckoutSession").mockImplementation(async (id) => ({ id, url: `https://checkout.stripe.test/${id}`, status: "open" }));
   vi.spyOn(stripeAdapter, "expireCheckoutSession").mockResolvedValue();
+  vi.spyOn(stripeAdapter, "getReceiptUrl").mockResolvedValue("https://pay.stripe.test/receipt/1");
 });
 
 afterAll(async () => {
@@ -216,7 +217,68 @@ describe("client lifecycle end to end", () => {
   });
 
   // Enabled by Phase 4 (PRODUCTION_PLAN.md T-LC-5 / T-LC-6)
-  it.todo("14. a milestone checkout webhook marks the tracker milestone paid and records a Payment");
-  it.todo("15. if the task transition fails after payment, side effects are retried until done");
+  it("14. a milestone checkout webhook marks the tracker milestone paid and records a Payment", async () => {
+    const task = await TaskRequest.create({ name: "Di", email: "di@client.test", service: "AI", description: "A long enough description.", status: "in_progress", trackingToken: "trk_di" });
+    const tracker = await ProjectTracker.create({
+      taskRequestId: task._id, proposalId: task._id, trackerToken: "trk-milestone-e2e",
+      milestones: [{ title: "Phase 2", amount: 75_000, dueDate: new Date() }],
+    });
+    const mId = String(tracker.milestones[0]._id);
+
+    expect((await request(app).post(`/v1/tracker/client/${tracker.trackerToken}/milestone/${mId}/checkout`)).status).toBe(409); // not requested yet
+    expect((await request(app).post(`/v1/tracker/admin/${tracker._id}/milestone/${mId}/mark-payable`).set(admin)).status).toBe(200);
+    const checkout = await request(app).post(`/v1/tracker/client/${tracker.trackerToken}/milestone/${mId}/checkout`);
+    expect(checkout.body.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.test\//);
+    const again = await request(app).post(`/v1/tracker/client/${tracker.trackerToken}/milestone/${mId}/checkout`);
+    expect(again.body.checkoutUrl).toBe(checkout.body.checkoutUrl);
+
+    const payment = await Payment.findOne({ trackerId: tracker._id, milestoneId: mId });
+    expect(payment).toMatchObject({ type: "milestone", amount: 75_000, status: "pending" });
+    const event = { id: "evt_milestone_1", type: "checkout.session.completed", data: { object: { id: payment!.stripeSessionId, payment_status: "paid", payment_intent: "pi_ms_1", metadata: { invoiceToken: payment!.invoiceToken } } } };
+    expect((await signedWebhook(event)).status).toBe(200);
+    expect((await signedWebhook(event)).status).toBe(200);
+
+    const paidTracker = await ProjectTracker.findById(tracker._id);
+    expect(paidTracker!.milestones[0].paidAt).toBeTruthy();
+    expect(String(paidTracker!.milestones[0].invoiceId)).toBe(String(payment!._id));
+    expect(await Payment.countDocuments({ type: "milestone", milestoneId: mId })).toBe(1);
+    expect((await request(app).post(`/v1/tracker/client/${tracker.trackerToken}/milestone/${mId}/checkout`)).body.alreadyPaid).toBe(true);
+  });
+
+  it("15. if post-payment work fails, the payment stays recorded and the work is retried until done", async () => {
+    const task = await TaskRequest.create({ name: "Ed", email: "ed@client.test", service: "AI", description: "A long enough description.", status: "contract_signed", trackingToken: "trk_ed" });
+    const payment = await Payment.create({
+      invoiceToken: "inv_retry", taskRequestId: task._id, clientEmail: "ed@client.test", description: "Deposit",
+      amount: 50_000, type: "invoice", status: "pending", stripeSessionId: "cs_retry",
+    });
+    const event = { id: "evt_retry_1", type: "checkout.session.completed", data: { object: { id: "cs_retry", payment_status: "paid", payment_intent: "pi_retry", metadata: { invoiceToken: "inv_retry" } } } };
+
+    vi.spyOn(resendAdapter, "emails", "get").mockReturnValue({ send: async () => { throw new Error("mail down"); } });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { paymentService } = await import("../../modules/payments/payment.service");
+    const original = paymentService.runPaidSideEffects.bind(paymentService);
+    const failing = vi.spyOn(paymentService, "runPaidSideEffects").mockRejectedValueOnce(new Error("transient failure"));
+
+    expect((await signedWebhook(event)).status).toBe(500); // Stripe will retry
+    const stuck = await Payment.findById(payment._id);
+    expect(stuck).toMatchObject({ status: "paid", sideEffectsDone: false });
+
+    failing.mockImplementation(original);
+    expect((await signedWebhook(event)).status).toBe(200); // Stripe's retry finishes the work
+    expect((await Payment.findById(payment._id))!.sideEffectsDone).toBe(true);
+    expect((await TaskRequest.findById(task._id))!.status).toBe("in_progress");
+  });
+
+  it("15b. the reconciler finishes post-payment work Stripe never retried", async () => {
+    const task = await TaskRequest.create({ name: "Fa", email: "fa@client.test", service: "AI", description: "A long enough description.", status: "contract_signed" });
+    await Payment.create({
+      invoiceToken: "inv_recon", taskRequestId: task._id, clientEmail: "fa@client.test", description: "Deposit", amount: 50_000,
+      type: "invoice", status: "paid", paidAt: new Date(Date.now() - 10 * 60_000), sideEffectsDone: false,
+    });
+    const { paymentService } = await import("../../modules/payments/payment.service");
+    expect(await paymentService.reconcilePaidPayments()).toBe(1);
+    expect((await TaskRequest.findById(task._id))!.status).toBe("in_progress");
+    expect(await paymentService.reconcilePaidPayments()).toBe(0);
+  });
   it.todo("17. cancelling an engagement cascades to proposal, contract and open invoices");
 });

@@ -1,6 +1,7 @@
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { toClientTracker } from "../lib/clientDto";
 import rateLimit from "express-rate-limit";
+import { paymentService } from "../modules/payments/payment.service";
 import { Router, Request, Response, NextFunction } from "express";
 import ProjectTracker from "../models/ProjectTracker";
 import TrackerMessage from "../models/TrackerMessage";
@@ -408,39 +409,13 @@ router.post("/admin/:id/milestone/:mId/mark-payable", requireAuth, async (req: R
     const task = await TaskRequest.findById(tracker.taskRequestId).lean() as any;
     if (!task) return next(createError("Task not found", 404));
 
-    // Lazy import stripe to keep things tidy
-    const stripe = (await import("../services/stripe")).default;
-    const appUrl = getAppUrl();
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [{
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: milestone.title,
-            description: `Project: ${task.projectTitle} — Milestone payment`,
-          },
-          unit_amount: milestone.amount, // already in cents
-        },
-        quantity: 1,
-      }],
-      customer_email: task.email,
-      metadata: {
-        type: "tracker_milestone",
-        trackerId: tracker._id.toString(),
-        milestoneId: milestone._id!.toString(),
-        trackerToken: tracker.trackerToken,
-      },
-      success_url: `${appUrl}/client/project/${tracker.trackerToken}?paid=1`,
-      cancel_url:  `${appUrl}/client/project/${tracker.trackerToken}`,
-    });
+    // A pending Payment the client pays from the project hub (same checkout and webhook path as invoices)
+    const payment = await paymentService.milestonePayment(String(tracker._id), String(milestone._id));
 
     milestone.paymentRequestedAt = new Date();
     await writeAudit(tracker, `Milestone marked payable: ${milestone.title}`, "Admin", "Admin");
     await tracker.save();
 
-    // Email client
     const { sendTrackerPaymentDueEmail } = await import("../services/email");
     await sendTrackerPaymentDueEmail({
       clientEmail: task.email,
@@ -450,7 +425,7 @@ router.post("/admin/:id/milestone/:mId/mark-payable", requireAuth, async (req: R
       portalUrl: getClientPortalUrl(tracker.trackerToken),
     });
 
-    res.json({ checkoutUrl: session.url, sessionId: session.id });
+    res.json({ message: "Payment requested", invoiceToken: payment.invoiceToken });
   } catch (err) { next(err); }
 });
 
@@ -586,33 +561,12 @@ router.post("/client/:token/milestone/:mId/checkout", async (req: Request, res: 
     const milestone = tracker.milestones.id(req.params.mId);
     if (!milestone) return next(createError("Milestone not found", 404));
     if (milestone.paidAt) return res.json({ alreadyPaid: true });
+    if (!milestone.paymentRequestedAt) return next(createError("This milestone isn't due for payment yet.", 409));
 
-    const task = await TaskRequest.findById(tracker.taskRequestId).lean() as any;
-    const stripe = (await import("../services/stripe")).default;
-    const appUrl = getAppUrl();
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [{
-        price_data: {
-          currency: "usd",
-          product_data: { name: milestone.title, description: `Project: ${task?.projectTitle}` },
-          unit_amount: milestone.amount,
-        },
-        quantity: 1,
-      }],
-      customer_email: task?.email,
-      metadata: {
-        type: "tracker_milestone",
-        trackerId: tracker._id.toString(),
-        milestoneId: milestone._id!.toString(),
-        trackerToken: tracker.trackerToken,
-      },
-      success_url: `${appUrl}/client/project/${tracker.trackerToken}?paid=1`,
-      cancel_url:  `${appUrl}/client/project/${tracker.trackerToken}`,
-    });
-
-    res.json({ checkoutUrl: session.url });
+    const payment = await paymentService.milestonePayment(String(tracker._id), String(milestone._id));
+    if (payment.status === "paid") return res.json({ alreadyPaid: true });
+    const checkoutUrl = await paymentService.processInvoiceCheckout(payment.invoiceToken!);
+    res.json({ checkoutUrl });
   } catch (err) { next(err); }
 });
 

@@ -18,7 +18,20 @@ export class StripeAdapter {
     if (!webhookSecret || !webhookSecret.startsWith("whsec_")) {
       throw new AppError("Stripe webhook secret is not configured", ERROR_CODES.INTERNAL_SERVER_ERROR);
     }
-    return this.getClient().webhooks.constructEvent(payload, signature, webhookSecret);
+    try {
+      return this.getClient().webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (err) {
+      // Bad/forged signature or malformed payload: reject (Stripe won't retry a 400)
+      throw new AppError(`Webhook signature verification failed: ${(err as Error).message}`, ERROR_CODES.BAD_REQUEST);
+    }
+  }
+
+  /** Receipt link of the charge behind a PaymentIntent ("" if unavailable). */
+  async getReceiptUrl(paymentIntentId: string): Promise<string> {
+    if (!paymentIntentId) return "";
+    const intent = await this.getClient().paymentIntents.retrieve(paymentIntentId, { expand: ["latest_charge"] });
+    const charge = intent.latest_charge as { receipt_url?: string | null } | null;
+    return charge?.receipt_url || "";
   }
 
   async createCheckoutSession(params: {

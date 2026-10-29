@@ -86,11 +86,12 @@ router.post("/webhook", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     console.error("Stripe Webhook Error:", err.message);
-    // Misconfiguration → 500 so Stripe retries once fixed; bad signature/payload → 400
-    if (err instanceof AppError && err.statusCode >= 500) {
-      return res.status(err.statusCode).send("Webhook Error: server misconfigured");
+    // Bad signature/payload → 400 (not retried). Anything else — misconfiguration,
+    // database or post-payment failures — → 500 so Stripe retries the event.
+    if (err instanceof AppError && err.statusCode === 400) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
     }
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    res.status(500).send("Webhook Error: processing failed, will retry");
   }
 });
 

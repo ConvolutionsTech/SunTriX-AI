@@ -952,3 +952,25 @@ export async function sendPasswordResetEmail(data: { email: string; name: string
     console.error("Failed to send password reset email:", err.message || err);
   }
 }
+
+// ─── Admin alert (payment problems, disputes) ──────────────────────────────
+export async function sendAdminAlert(data: { subject: string; message: string; adminUrl?: string }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
+  try {
+    const { error } = await getResend().emails.send({
+      from: getFromAddress(),
+      to: [getAdminEmail()],
+      subject: `[${getBrandName()}] ${data.subject}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">${e.subject}</h2>
+          <p style="white-space: pre-wrap;">${e.message}</p>
+          ${e.adminUrl ? `<p><a href="${e.adminUrl}">Open in the admin dashboard</a></p>` : ""}
+        </div>
+      `,
+    });
+    if (error) console.error("Resend Admin Alert Error:", error.message);
+  } catch (err: any) {
+    console.error("Failed to send admin alert:", err.message || err);
+  }
+}
