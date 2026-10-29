@@ -48,6 +48,8 @@ const token = (role: string) => tokens[role];
  * fails this suite until it is reviewed and listed here.
  */
 const PUBLIC_ROUTES = new Set([
+  // Search engines
+  "GET /v1/sitemap.xml",
   // Admin sign-in and password reset (rate-limited)
   "POST /v1/auth/login", "POST /v1/auth/refresh", "POST /v1/auth/forgot", "POST /v1/auth/reset/:token",
   // Published site content (drafts need a staff token — publicDrafts.test.ts)

@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { I18nProvider } from "@/lib/i18n";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import { RobotsGuard } from "./components/RobotsGuard";
 import NewsletterStatus from "./pages/NewsletterStatus";
 import ServicesOverview from "./pages/ServicesOverview";
 
@@ -68,6 +69,7 @@ const AppRoutes = () => {
   return (
     <>
       <ScrollToTop />
+      <RobotsGuard />
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/services" element={<ServicesOverview />} />

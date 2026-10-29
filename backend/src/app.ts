@@ -175,6 +175,7 @@ const V1 = "/v1";
 // (webhook raw body is handled above before express.json)
 
 import trackerRoutes from "./routes/tracker.routes";
+import sitemapRoutes from "./routes/sitemap.routes";
 
 // Audit trail for routers whose handlers don't call logAudit themselves (lib/audit.ts)
 const auditCaseStudies = auditWrites("case_study");
@@ -208,6 +209,7 @@ app.use(`${V1}/settings`, settingsRoutes);
 app.use(`${V1}/proposals`, proposalRoutes);
 app.use(`${V1}/contracts`, contractRoutes);
 app.use(`${V1}/tracker`, auditTracker, trackerRoutes);
+app.use(`${V1}`, sitemapRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────
 app.use((_req, res) => {
