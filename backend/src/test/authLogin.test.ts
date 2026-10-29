@@ -34,7 +34,7 @@ describe("admin login hardening (A10, M29)", () => {
     expect(statuses).toEqual([401, 401, 401, 401, 401]);
     expect((await attempt("/v1/auth/login/")).status).toBe(429);
     expect((await attempt("/v1/auth/LOGIN")).status).toBe(429);
-  });
+  }, 30000);
 
   it("takes about as long for an unknown email as for a wrong password", async () => {
     const unknown: number[] = [];

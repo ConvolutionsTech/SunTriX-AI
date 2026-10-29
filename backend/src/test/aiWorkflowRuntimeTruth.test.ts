@@ -40,7 +40,12 @@ describe("Phase 5.11 AI Workflow Runtime Model Selection Verification", () => {
   it("should fail explicitly if configured model is rejected by API key without silent replacement", async () => {
     updateSettingCache("GROQ_CHAT_MODEL", "invalid_restricted_model_key");
 
+    // Catalog from a reachable Groq account that doesn't include the model (no network call)
+    vi.spyOn(groqAdapter, "listAvailableModels").mockResolvedValueOnce([
+      { id: "llama-3.1-8b-instant", name: "llama-3.1-8b-instant", ownedBy: "groq", active: true, capabilities: [], planEligibility: "Available on Groq" },
+    ]);
     const check = await groqAdapter.validateModelAvailability("invalid_restricted_model_key");
-    expect(check.isValid).toBeDefined();
+    expect(check.isValid).toBe(false);
+    expect(check.unverifiable).toBeFalsy();
   });
 });
