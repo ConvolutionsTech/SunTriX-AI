@@ -1,5 +1,6 @@
 import { resendAdapter } from "../integrations/resend/resend.adapter";
 import { getSetting } from "../lib/configLoader";
+import { escapeFields } from "../lib/escapeHtml";
 
 // ─── Lazy factory — delegates to ResendAdapter ────────────────────────────
 function getResend() {
@@ -14,7 +15,10 @@ function getBrandName()    { return getSetting("BRAND_NAME",           "SunTriX 
 function getBrandWebsite() { return getSetting("BRAND_WEBSITE",        "suntrix.ai"); }
 function getBatchSize()    { return parseInt(getSetting("NEWSLETTER_BATCH_SIZE", "100")); }
 
-function getFromAddress(): string {
+// Single source for the sender: EMAIL_FROM if set, otherwise name + address
+export function getFromAddress(): string {
+  const explicit = getSetting("EMAIL_FROM");
+  if (explicit) return explicit;
   const name    = getSetting("FROM_EMAIL_NAME",    "SunTriX");
   const address = getSetting("FROM_EMAIL_ADDRESS", "onboarding@resend.dev");
   return `${name} <${address}>`;
@@ -28,6 +32,7 @@ export async function sendContactNotification(data: {
   subject: string;
   message: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   if (getSetting("EMAIL_CONTACT_NOTIFICATIONS", "true") !== "true") return;
 
   try {
@@ -39,14 +44,14 @@ export async function sendContactNotification(data: {
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #f97316;">New Contact Message</h2>
           <table style="width:100%; border-collapse: collapse;">
-            <tr><td style="padding: 8px; font-weight: bold;">Name</td><td style="padding: 8px;">${data.name}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Email</td><td style="padding: 8px;"><a href="mailto:${data.email}">${data.email}</a></td></tr>
-            ${data.company ? `<tr><td style="padding: 8px; font-weight: bold;">Company</td><td style="padding: 8px;">${data.company}</td></tr>` : ""}
-            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Subject</td><td style="padding: 8px;">${data.subject}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Name</td><td style="padding: 8px;">${e.name}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Email</td><td style="padding: 8px;"><a href="mailto:${e.email}">${e.email}</a></td></tr>
+            ${e.company ? `<tr><td style="padding: 8px; font-weight: bold;">Company</td><td style="padding: 8px;">${e.company}</td></tr>` : ""}
+            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Subject</td><td style="padding: 8px;">${e.subject}</td></tr>
           </table>
           <div style="margin-top: 16px; padding: 16px; background: #f3f4f6; border-radius: 8px;">
             <p style="font-weight: bold; margin: 0 0 8px;">Message:</p>
-            <p style="margin: 0; white-space: pre-wrap;">${data.message}</p>
+            <p style="margin: 0; white-space: pre-wrap;">${e.message}</p>
           </div>
           <p style="margin-top: 16px; color: #6b7280; font-size: 12px;">View all messages in the <a href="${getFrontendUrl()}/admin/messages">Admin Dashboard</a>.</p>
         </div>
@@ -70,6 +75,7 @@ export async function sendTaskNotification(data: {
   description: string;
   selectedPlan?: string;   // dynamic — from whatever plan admin configured
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   if (getSetting("EMAIL_TASK_NOTIFICATIONS", "true") !== "true") return;
 
   try {
@@ -81,18 +87,18 @@ export async function sendTaskNotification(data: {
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #f97316;">🚀 New Task Request</h2>
           <table style="width:100%; border-collapse: collapse;">
-            <tr><td style="padding: 8px; font-weight: bold;">Name</td><td style="padding: 8px;">${data.name}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Email</td><td style="padding: 8px;"><a href="mailto:${data.email}">${data.email}</a></td></tr>
-            ${data.company ? `<tr><td style="padding: 8px; font-weight: bold;">Company</td><td style="padding: 8px;">${data.company}</td></tr>` : ""}
-            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Project</td><td style="padding: 8px;">${data.projectTitle}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Service</td><td style="padding: 8px;">${data.service}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Budget</td><td style="padding: 8px;">${data.budget || "Not specified"}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Priority</td><td style="padding: 8px;">${data.priority}</td></tr>
-            ${data.selectedPlan ? `<tr style="background:#fff7ed;"><td style="padding: 8px; font-weight: bold; color:#f97316;">Selected Plan</td><td style="padding: 8px; font-weight:bold;">${data.selectedPlan}</td></tr>` : ""}
+            <tr><td style="padding: 8px; font-weight: bold;">Name</td><td style="padding: 8px;">${e.name}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Email</td><td style="padding: 8px;"><a href="mailto:${e.email}">${e.email}</a></td></tr>
+            ${e.company ? `<tr><td style="padding: 8px; font-weight: bold;">Company</td><td style="padding: 8px;">${e.company}</td></tr>` : ""}
+            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Project</td><td style="padding: 8px;">${e.projectTitle}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Service</td><td style="padding: 8px;">${e.service}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding: 8px; font-weight: bold;">Budget</td><td style="padding: 8px;">${e.budget || "Not specified"}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Priority</td><td style="padding: 8px;">${e.priority}</td></tr>
+            ${e.selectedPlan ? `<tr style="background:#fff7ed;"><td style="padding: 8px; font-weight: bold; color:#f97316;">Selected Plan</td><td style="padding: 8px; font-weight:bold;">${e.selectedPlan}</td></tr>` : ""}
           </table>
           <div style="margin-top: 16px; padding: 16px; background: #f3f4f6; border-radius: 8px;">
             <p style="font-weight: bold; margin: 0 0 8px;">Description:</p>
-            <p style="margin: 0; white-space: pre-wrap;">${data.description}</p>
+            <p style="margin: 0; white-space: pre-wrap;">${e.description}</p>
           </div>
           <p style="margin-top: 16px; color: #6b7280; font-size: 12px;">Manage this request in the <a href="${getFrontendUrl()}/admin/tasks">Admin Dashboard</a>.</p>
         </div>
@@ -107,6 +113,7 @@ export async function sendTaskNotification(data: {
 // ─── Project Tracker Notifications ──────────────────────────────────────────
 
 export async function sendTrackerPhaseAdvancedEmail(data: { clientEmail: string; projectTitle: string; newPhase: string; portalUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -114,15 +121,16 @@ export async function sendTrackerPhaseAdvancedEmail(data: { clientEmail: string;
       subject: `Project Update: Now in ${data.newPhase} — ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#4f46e5;margin-top:0;">🚀 Phase Advanced</h2>
-        <p style="color:#374151;font-size:16px;">Great news! <strong>${data.projectTitle}</strong> has officially advanced to the <strong>${data.newPhase}</strong> phase.</p>
+        <p style="color:#374151;font-size:16px;">Great news! <strong>${e.projectTitle}</strong> has officially advanced to the <strong>${e.newPhase}</strong> phase.</p>
         <p style="color:#6b7280;margin-bottom:24px;">You can view the updated timeline and current focus areas in your Project Hub.</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View Project Hub</a>
+        <a href="${e.portalUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View Project Hub</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerDeliverableReviewEmail(data: { clientEmail: string; projectTitle: string; deliverableTitle: string; portalUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -130,15 +138,16 @@ export async function sendTrackerDeliverableReviewEmail(data: { clientEmail: str
       subject: `Action Required: Review Deliverable for ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#f59e0b;margin-top:0;">👀 Deliverable Ready for Review</h2>
-        <p style="color:#374151;font-size:16px;">We have submitted a deliverable for your approval: <strong>${data.deliverableTitle}</strong>.</p>
+        <p style="color:#374151;font-size:16px;">We have submitted a deliverable for your approval: <strong>${e.deliverableTitle}</strong>.</p>
         <p style="color:#6b7280;margin-bottom:24px;">Please review the attached materials in your Project Hub and let us know if you approve or require changes.</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:#f59e0b;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Review Deliverable</a>
+        <a href="${e.portalUrl}" style="display:inline-block;background:#f59e0b;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Review Deliverable</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerUpdateEmail(data: { clientEmail: string; projectTitle: string; updateType: string; portalUrl: string; isActionRequired: boolean; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const color = data.isActionRequired ? "#ef4444" : "#10b981";
     await getResend().emails.send({
@@ -147,14 +156,15 @@ export async function sendTrackerUpdateEmail(data: { clientEmail: string; projec
       subject: `${data.isActionRequired ? 'Action Required: ' : ''}New Update on ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:${color};margin-top:0;">📝 Project Update Posted</h2>
-        <p style="color:#374151;font-size:16px;">We've posted a new <strong>${data.updateType}</strong> regarding your project.</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:${color};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Read Update</a>
+        <p style="color:#374151;font-size:16px;">We've posted a new <strong>${e.updateType}</strong> regarding your project.</p>
+        <a href="${e.portalUrl}" style="display:inline-block;background:${color};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Read Update</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerFileEmail(data: { clientEmail: string; projectTitle: string; filename: string; portalUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -162,14 +172,15 @@ export async function sendTrackerFileEmail(data: { clientEmail: string; projectT
       subject: `New File Shared: ${data.filename} — ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#3b82f6;margin-top:0;">📁 File Ready for Review</h2>
-        <p style="color:#374151;font-size:16px;">A new file has been shared with you: <strong>${data.filename}</strong>.</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:#3b82f6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View File</a>
+        <p style="color:#374151;font-size:16px;">A new file has been shared with you: <strong>${e.filename}</strong>.</p>
+        <a href="${e.portalUrl}" style="display:inline-block;background:#3b82f6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">View File</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -177,15 +188,16 @@ export async function sendTrackerPaymentDueEmail(data: { clientEmail: string; pr
       subject: `Invoice Ready: ${data.milestoneTitle} — ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#ef4444;margin-top:0;">💳 Payment Due</h2>
-        <p style="color:#374151;font-size:16px;">An invoice of <strong>${data.amountFormatted}</strong> is now due for the milestone: <strong>${data.milestoneTitle}</strong>.</p>
+        <p style="color:#374151;font-size:16px;">An invoice of <strong>${e.amountFormatted}</strong> is now due for the milestone: <strong>${e.milestoneTitle}</strong>.</p>
         <p style="color:#6b7280;margin-bottom:24px;">You can pay this securely via your Project Hub.</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:#ef4444;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Pay Invoice Now</a>
+        <a href="${e.portalUrl}" style="display:inline-block;background:#ef4444;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Pay Invoice Now</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: string; projectTitle: string; milestoneTitle: string; amountFormatted: string; portalUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -193,15 +205,16 @@ export async function sendTrackerPaymentConfirmedEmail(data: { clientEmail: stri
       subject: `Payment Received: ${data.milestoneTitle} — ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#10b981;margin-top:0;">✅ Payment Confirmed</h2>
-        <p style="color:#374151;font-size:16px;">We have successfully received your payment of <strong>${data.amountFormatted}</strong> for <strong>${data.milestoneTitle}</strong>.</p>
+        <p style="color:#374151;font-size:16px;">We have successfully received your payment of <strong>${e.amountFormatted}</strong> for <strong>${e.milestoneTitle}</strong>.</p>
         <p style="color:#6b7280;margin-bottom:24px;">Thank you for your prompt payment!</p>
-        <a href="${data.portalUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Go to Project Hub</a>
+        <a href="${e.portalUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Go to Project Hub</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
 }
 
 export async function sendTrackerClientActionToAdminEmail(data: { actionStr: string; projectTitle: string; targetName: string; adminUrl: string; }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     await getResend().emails.send({
       from: getFromAddress(),
@@ -209,8 +222,8 @@ export async function sendTrackerClientActionToAdminEmail(data: { actionStr: str
       subject: `Client ${data.actionStr} — ${data.projectTitle}`,
       html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;padding:24px;">
         <h2 style="color:#4f46e5;margin-top:0;">Client Action Logged</h2>
-        <p style="color:#374151;font-size:16px;">The client has <strong>${data.actionStr}</strong> for: <strong>${data.targetName}</strong>.</p>
-        <a href="${data.adminUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Open Admin Dashboard</a>
+        <p style="color:#374151;font-size:16px;">The client has <strong>${e.actionStr}</strong> for: <strong>${e.targetName}</strong>.</p>
+        <a href="${e.adminUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Open Admin Dashboard</a>
       </div>`,
     });
   } catch (err) { console.error("Email Error:", err); }
@@ -225,6 +238,7 @@ export async function sendInvoiceEmail(data: {
   expiresAt: string;
   projectTitle?: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   const brand   = getBrandName();
   const website = getBrandWebsite();
   const appUrl  = getFrontendUrl();
@@ -243,18 +257,18 @@ export async function sendInvoiceEmail(data: {
             </div>
             <div style="padding:32px;">
               <p style="color:#d4d4d4;font-size:15px;line-height:1.6;margin:0 0 24px;">
-                Hi ${data.clientName || "there"},<br><br>
+                Hi ${e.clientName || "there"},<br><br>
                 Thank you for your interest in working with ${brand}. We've prepared a proposal for your project.
                 Please review the details below and click the button to proceed with payment.
               </p>
               <div style="background:#111;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
-                ${data.projectTitle ? `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Project</span><span style="color:#fff;font-size:13px;font-weight:600;">${data.projectTitle}</span></div>` : ""}
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Service</span><span style="color:#fff;font-size:13px;font-weight:600;">${data.description}</span></div>
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Invoice Expires</span><span style="color:#f59e0b;font-size:13px;font-weight:600;">${data.expiresAt}</span></div>
-                <div style="display:flex;justify-content:space-between;padding:16px 0 0;"><span style="color:#888;font-size:15px;font-weight:700;">Total Due</span><span style="color:#f97316;font-size:24px;font-weight:800;">${data.amountUSD}</span></div>
+                ${e.projectTitle ? `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Project</span><span style="color:#fff;font-size:13px;font-weight:600;">${e.projectTitle}</span></div>` : ""}
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Service</span><span style="color:#fff;font-size:13px;font-weight:600;">${e.description}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Invoice Expires</span><span style="color:#f59e0b;font-size:13px;font-weight:600;">${e.expiresAt}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:16px 0 0;"><span style="color:#888;font-size:15px;font-weight:700;">Total Due</span><span style="color:#f97316;font-size:24px;font-weight:800;">${e.amountUSD}</span></div>
               </div>
               <div style="text-align:center;margin-bottom:24px;">
-                <a href="${data.invoiceUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:800;font-size:16px;padding:16px 40px;border-radius:12px;text-decoration:none;letter-spacing:0.5px;">
+                <a href="${e.invoiceUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:800;font-size:16px;padding:16px 40px;border-radius:12px;text-decoration:none;letter-spacing:0.5px;">
                   View &amp; Pay Invoice →
                 </a>
               </div>
@@ -286,6 +300,7 @@ export async function sendPaymentConfirmation(data: {
   trackingUrl?: string;
   paidAt: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   const brand   = getBrandName();
   const website = getBrandWebsite();
   const appUrl  = getFrontendUrl();
@@ -309,14 +324,14 @@ export async function sendPaymentConfirmation(data: {
             </div>
             <div style="padding:32px;">
               <p style="color:#d4d4d4;font-size:15px;line-height:1.6;margin:0 0 24px;">
-                Hi ${data.clientName || "there"},<br><br>
+                Hi ${e.clientName || "there"},<br><br>
                 Thank you for your payment! We've received it and your project is now active.
                 Our team will reach out within <strong style="color:#fff;">${sla}</strong> to discuss next steps.
               </p>
               <div style="background:#111;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Service</span><span style="color:#fff;font-size:13px;font-weight:600;">${data.description}</span></div>
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Date</span><span style="color:#fff;font-size:13px;font-weight:600;">${data.paidAt}</span></div>
-                <div style="display:flex;justify-content:space-between;padding:16px 0 0;"><span style="color:#888;font-size:15px;font-weight:700;">Amount Paid</span><span style="color:#10b981;font-size:24px;font-weight:800;">${data.amountUSD}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Service</span><span style="color:#fff;font-size:13px;font-weight:600;">${e.description}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;"><span style="color:#888;font-size:13px;">Date</span><span style="color:#fff;font-size:13px;font-weight:600;">${e.paidAt}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:16px 0 0;"><span style="color:#888;font-size:15px;font-weight:700;">Amount Paid</span><span style="color:#10b981;font-size:24px;font-weight:800;">${e.amountUSD}</span></div>
               </div>
               <div style="background:#0d1f17;border:1px solid #065f46;border-radius:12px;padding:20px;margin-bottom:24px;">
                 <p style="color:#10b981;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;margin:0 0 16px;">What happens next</p>
@@ -326,8 +341,8 @@ export async function sendPaymentConfirmation(data: {
                 <p style="color:#d4d4d4;font-size:13px;margin:0;">🚀 &nbsp;Development begins after kickoff</p>
               </div>
               <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;">
-                ${data.trackingUrl ? `<a href="${data.trackingUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Track My Project →</a>` : ""}
-                ${data.receiptUrl ? `<a href="${data.receiptUrl}" style="display:inline-block;background:#1a1a1a;border:1px solid #2a2a2a;color:#d4d4d4;font-weight:600;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Download Receipt</a>` : ""}
+                ${e.trackingUrl ? `<a href="${e.trackingUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Track My Project →</a>` : ""}
+                ${e.receiptUrl ? `<a href="${e.receiptUrl}" style="display:inline-block;background:#1a1a1a;border:1px solid #2a2a2a;color:#d4d4d4;font-weight:600;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;">Download Receipt</a>` : ""}
               </div>
               <p style="color:#666;font-size:12px;text-align:center;line-height:1.6;">
                 Questions? Reply to this email or <a href="${appUrl}/contact" style="color:#f97316;">contact us here</a>.
@@ -401,6 +416,7 @@ export async function sendCampaignFailureNotification(data: {
   totalCount: number;
   errorMessage: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const { error } = await getResend().emails.send({
       from: getFromAddress(),
@@ -409,10 +425,10 @@ export async function sendCampaignFailureNotification(data: {
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;padding:24px;">
           <h2 style="color:#ef4444;margin-top:0;">Broadcast Failed</h2>
-          <p>The campaign <strong>"${data.subject}"</strong> encountered an error during delivery.</p>
+          <p>The campaign <strong>"${e.subject}"</strong> encountered an error during delivery.</p>
           <ul>
-            <li><strong>Sent:</strong> ${data.sentCount} out of ${data.totalCount}</li>
-            <li><strong>Error:</strong> ${data.errorMessage}</li>
+            <li><strong>Sent:</strong> ${e.sentCount} out of ${e.totalCount}</li>
+            <li><strong>Error:</strong> ${e.errorMessage}</li>
           </ul>
           <p>You can retry the remaining unsent emails from the Admin Dashboard.</p>
         </div>`,
@@ -457,11 +473,12 @@ export async function sendProposalEmail(data: {
   proposalUrl:   string;
   expiresAt:     string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   const brand   = getBrandName();
   const website = getBrandWebsite();
   const appUrl  = getFrontendUrl();
 
-  const milestonesHtml = data.milestones.map((m, i) => `
+  const milestonesHtml = e.milestones.map((m, i) => `
     <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;">
       <span style="color:#d4d4d4;font-size:13px;">Milestone ${i + 1}: ${m.title}</span>
       <span style="color:#f97316;font-size:13px;font-weight:700;">${m.amount}</span>
@@ -478,26 +495,26 @@ export async function sendProposalEmail(data: {
             <div style="background:linear-gradient(135deg,#f97316,#fb923c);padding:32px;text-align:center;">
               <p style="color:rgba(255,255,255,0.8);font-size:12px;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px;">${brand}</p>
               <h1 style="color:#fff;font-size:26px;font-weight:800;margin:0;">Project Proposal</h1>
-              <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:8px 0 0;">${data.proposalTitle}</p>
+              <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:8px 0 0;">${e.proposalTitle}</p>
             </div>
             <div style="padding:32px;">
               <p style="color:#d4d4d4;font-size:15px;line-height:1.7;margin:0 0 24px;">
-                Hi ${data.clientName || "there"},<br><br>
-                ${data.introduction || `Thank you for submitting your project request. We've reviewed your requirements and prepared a detailed proposal tailored to your needs. Please take a moment to review and let us know how you'd like to proceed.`}
+                Hi ${e.clientName || "there"},<br><br>
+                ${e.introduction || `Thank you for submitting your project request. We've reviewed your requirements and prepared a detailed proposal tailored to your needs. Please take a moment to review and let us know how you'd like to proceed.`}
               </p>
               <div style="background:#111;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
                 <p style="color:#888;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:0 0 12px;">Payment Milestones</p>
                 ${milestonesHtml}
                 <div style="display:flex;justify-content:space-between;padding:14px 0 2px;">
                   <span style="color:#888;font-size:14px;font-weight:700;">Total Investment</span>
-                  <span style="color:#f97316;font-size:22px;font-weight:800;">${data.totalAmount}</span>
+                  <span style="color:#f97316;font-size:22px;font-weight:800;">${e.totalAmount}</span>
                 </div>
               </div>
               <div style="background:#1a1a1a;border:1px solid #f97316/30;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
-                <p style="color:#f59e0b;font-size:12px;margin:0;">⏰ This proposal expires on <strong>${data.expiresAt}</strong></p>
+                <p style="color:#f59e0b;font-size:12px;margin:0;">⏰ This proposal expires on <strong>${e.expiresAt}</strong></p>
               </div>
               <div style="text-align:center;margin-bottom:24px;">
-                <a href="${data.proposalUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:800;font-size:16px;padding:16px 44px;border-radius:12px;text-decoration:none;">
+                <a href="${e.proposalUrl}" style="display:inline-block;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-weight:800;font-size:16px;padding:16px 44px;border-radius:12px;text-decoration:none;">
                   Review Proposal →
                 </a>
               </div>
@@ -525,6 +542,7 @@ export async function sendChangesRequestedNotification(data: {
   clientNote:   string;
   adminUrl:     string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const { error } = await getResend().emails.send({
       from: getFromAddress(),
@@ -534,15 +552,15 @@ export async function sendChangesRequestedNotification(data: {
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#f97316;">📝 Client Requested Changes</h2>
           <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:8px;font-weight:bold;">Client</td><td style="padding:8px;">${data.clientName}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;"><a href="mailto:${data.clientEmail}">${data.clientEmail}</a></td></tr>
-            <tr><td style="padding:8px;font-weight:bold;">Project</td><td style="padding:8px;">${data.projectTitle}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">Client</td><td style="padding:8px;">${e.clientName}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;"><a href="mailto:${e.clientEmail}">${e.clientEmail}</a></td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">Project</td><td style="padding:8px;">${e.projectTitle}</td></tr>
           </table>
           <div style="margin-top:16px;padding:16px;background:#fef3c7;border-radius:8px;border-left:4px solid #f59e0b;">
             <p style="font-weight:bold;margin:0 0 8px;">Client's requested changes:</p>
-            <p style="margin:0;white-space:pre-wrap;">${data.clientNote}</p>
+            <p style="margin:0;white-space:pre-wrap;">${e.clientNote}</p>
           </div>
-          <p style="margin-top:16px;color:#6b7280;font-size:12px;">Review in <a href="${data.adminUrl}">Admin Dashboard</a> and revise the proposal.</p>
+          <p style="margin-top:16px;color:#6b7280;font-size:12px;">Review in <a href="${e.adminUrl}">Admin Dashboard</a> and revise the proposal.</p>
         </div>`,
     });
     if (error) console.error("Resend Changes Notification Error:", error.message);
@@ -560,6 +578,7 @@ export async function sendContractEmail(data: {
   contractUrl:  string;
   expiresAt:    string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   const brand   = getBrandName();
   const website = getBrandWebsite();
   const appUrl  = getFrontendUrl();
@@ -579,30 +598,30 @@ export async function sendContractEmail(data: {
             </div>
             <div style="padding:32px;">
               <p style="color:#d4d4d4;font-size:15px;line-height:1.7;margin:0 0 24px;">
-                Hi ${data.clientName || "there"},<br><br>
-                You've accepted our proposal for <strong style="color:#fff;">${data.projectTitle}</strong>. 
+                Hi ${e.clientName || "there"},<br><br>
+                You've accepted our proposal for <strong style="color:#fff;">${e.projectTitle}</strong>. 
                 We've prepared your service agreement outlining all project commitments, milestones, and deliverables.
                 Please review and sign to officially kick off your project.
               </p>
               <div style="background:#111;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:24px;">
                 <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;">
                   <span style="color:#888;font-size:13px;">Project</span>
-                  <span style="color:#fff;font-size:13px;font-weight:600;">${data.projectTitle}</span>
+                  <span style="color:#fff;font-size:13px;font-weight:600;">${e.projectTitle}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a2a;">
                   <span style="color:#888;font-size:13px;">Contract Expires</span>
-                  <span style="color:#f59e0b;font-size:13px;font-weight:600;">${data.expiresAt}</span>
+                  <span style="color:#f59e0b;font-size:13px;font-weight:600;">${e.expiresAt}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;padding:14px 0 2px;">
                   <span style="color:#888;font-size:14px;font-weight:700;">Total Project Value</span>
-                  <span style="color:#a78bfa;font-size:22px;font-weight:800;">${data.totalAmount}</span>
+                  <span style="color:#a78bfa;font-size:22px;font-weight:800;">${e.totalAmount}</span>
                 </div>
               </div>
               <div style="background:#1e1b4b;border:1px solid #6366f1;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
                 <p style="color:#a5b4fc;font-size:13px;margin:0;">✍️ Simply type your full name in the signature field and click "Sign" — no download needed.</p>
               </div>
               <div style="text-align:center;margin-bottom:24px;">
-                <a href="${data.contractUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:800;font-size:16px;padding:16px 44px;border-radius:12px;text-decoration:none;">
+                <a href="${e.contractUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:800;font-size:16px;padding:16px 44px;border-radius:12px;text-decoration:none;">
                   Review &amp; Sign Contract →
                 </a>
               </div>
@@ -630,6 +649,7 @@ export async function sendContractSignedNotification(data: {
   signedAt:     string;
   adminUrl:     string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const { error } = await getResend().emails.send({
       from: getFromAddress(),
@@ -639,15 +659,15 @@ export async function sendContractSignedNotification(data: {
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#10b981;">✅ Contract Signed — Invoice Can Now Be Created</h2>
           <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:8px;font-weight:bold;">Client</td><td style="padding:8px;">${data.clientName}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;"><a href="mailto:${data.clientEmail}">${data.clientEmail}</a></td></tr>
-            <tr><td style="padding:8px;font-weight:bold;">Project</td><td style="padding:8px;">${data.projectTitle}</td></tr>
-            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Signed On</td><td style="padding:8px;">${data.signedAt}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">Client</td><td style="padding:8px;">${e.clientName}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Email</td><td style="padding:8px;"><a href="mailto:${e.clientEmail}">${e.clientEmail}</a></td></tr>
+            <tr><td style="padding:8px;font-weight:bold;">Project</td><td style="padding:8px;">${e.projectTitle}</td></tr>
+            <tr style="background:#f9f9f9;"><td style="padding:8px;font-weight:bold;">Signed On</td><td style="padding:8px;">${e.signedAt}</td></tr>
           </table>
           <div style="margin-top:16px;padding:16px;background:#d1fae5;border-radius:8px;border-left:4px solid #10b981;">
             <p style="font-weight:bold;margin:0;color:#065f46;">🚀 Next step: Create the first milestone invoice in the Admin Dashboard.</p>
           </div>
-          <p style="margin-top:16px;color:#6b7280;font-size:12px;"><a href="${data.adminUrl}">Go to Admin Dashboard →</a></p>
+          <p style="margin-top:16px;color:#6b7280;font-size:12px;"><a href="${e.adminUrl}">Go to Admin Dashboard →</a></p>
         </div>`,
     });
     if (error) console.error("Resend Contract Signed Error:", error.message);
@@ -662,6 +682,7 @@ export async function sendTrackerCompletionRequestEmail(data: {
   projectTitle: string;
   portalUrl: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const { error } = await getResend().emails.send({
       from: getFromAddress(),
@@ -675,16 +696,16 @@ export async function sendTrackerCompletionRequestEmail(data: {
             <p style="margin:8px 0 0;color:#bbf7d0;font-size:15px;">${getBrandName()}</p>
           </div>
           <div style="padding:36px 32px;">
-            <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${data.clientName},</p>
+            <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${e.clientName},</p>
             <p style="font-size:16px;line-height:1.7;margin:0 0 24px;">
-              Great news! The team has completed all deliverables for <strong>${data.projectTitle}</strong> and is requesting your final approval to officially close this project.
+              Great news! The team has completed all deliverables for <strong>${e.projectTitle}</strong> and is requesting your final approval to officially close this project.
             </p>
             <div style="background:#1a1a1a;border:1px solid #16a34a;border-radius:12px;padding:20px;margin-bottom:28px;">
               <p style="margin:0;font-size:14px;color:#86efac;font-weight:700;text-transform:uppercase;letter-spacing:1px;">What happens next?</p>
               <p style="margin:8px 0 0;font-size:14px;color:#d1d5db;line-height:1.6;">Visit your project portal and click <strong>"Approve & Complete Project"</strong>. By approving, you confirm that all deliverables meet your expectations.</p>
             </div>
             <div style="text-align:center;margin:32px 0;">
-              <a href="${data.portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:800;font-size:16px;box-shadow:0 8px 24px rgba(22,163,74,0.4);">
+              <a href="${e.portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:800;font-size:16px;box-shadow:0 8px 24px rgba(22,163,74,0.4);">
                 ✅ Review & Approve Project
               </a>
             </div>
@@ -707,6 +728,7 @@ export async function sendTrackerCompletionApprovedEmail(data: {
   clientName: string;
   adminUrl: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const { error } = await getResend().emails.send({
       from: getFromAddress(),
@@ -722,13 +744,13 @@ export async function sendTrackerCompletionApprovedEmail(data: {
           <div style="padding:36px 32px;">
             <div style="background:#1a1a1a;border:1px solid #7c3aed;border-radius:12px;padding:20px;margin-bottom:28px;">
               <table style="width:100%;border-collapse:collapse;">
-                <tr><td style="padding:8px;font-weight:bold;color:#a78bfa;">Project</td><td style="padding:8px;color:#f3f4f6;">${data.projectTitle}</td></tr>
-                <tr style="background:#0f0f0f;"><td style="padding:8px;font-weight:bold;color:#a78bfa;">Client</td><td style="padding:8px;color:#f3f4f6;">${data.clientName}</td></tr>
+                <tr><td style="padding:8px;font-weight:bold;color:#a78bfa;">Project</td><td style="padding:8px;color:#f3f4f6;">${e.projectTitle}</td></tr>
+                <tr style="background:#0f0f0f;"><td style="padding:8px;font-weight:bold;color:#a78bfa;">Client</td><td style="padding:8px;color:#f3f4f6;">${e.clientName}</td></tr>
                 <tr><td style="padding:8px;font-weight:bold;color:#a78bfa;">Completed On</td><td style="padding:8px;color:#f3f4f6;">${new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</td></tr>
               </table>
             </div>
             <div style="text-align:center;margin:28px 0;">
-              <a href="${data.adminUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;text-decoration:none;padding:14px 36px;border-radius:50px;font-weight:700;font-size:15px;">
+              <a href="${e.adminUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;text-decoration:none;padding:14px 36px;border-radius:50px;font-weight:700;font-size:15px;">
                 View in Admin Dashboard →
               </a>
             </div>
@@ -751,6 +773,7 @@ export async function sendSignedContractEmail(data: {
   docxBuffer: Buffer;
   filename: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   const subject = `📄 Signed Contract — ${data.projectTitle}`;
   const html = `
     <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#0f0f0f;color:#f3f4f6;border-radius:16px;overflow:hidden;">
@@ -760,9 +783,9 @@ export async function sendSignedContractEmail(data: {
         <p style="margin:8px 0 0;color:#fed7aa;font-size:15px;">${getBrandName()}</p>
       </div>
       <div style="padding:36px 32px;">
-        <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${data.clientName},</p>
+        <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${e.clientName},</p>
         <p style="font-size:15px;line-height:1.7;margin:0 0 20px;">
-          This email confirms that the contract for <strong>${data.projectTitle}</strong> has been digitally signed on <strong>${data.signedAt}</strong>.
+          This email confirms that the contract for <strong>${e.projectTitle}</strong> has been digitally signed on <strong>${e.signedAt}</strong>.
         </p>
         <div style="background:#1a1a1a;border:1px solid #f97316;border-radius:12px;padding:20px;margin-bottom:24px;">
           <p style="margin:0 0 8px;font-size:14px;color:#fb923c;font-weight:700;">📎 Attachment</p>
@@ -804,6 +827,7 @@ export async function sendNewsletterConfirmationEmail(data: {
   email: string;
   confirmUrl: string; // [FRONTEND_URL]/newsletter/confirm/[token]
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const brand = getBrandName();
     const { error } = await getResend().emails.send({
@@ -817,13 +841,13 @@ export async function sendNewsletterConfirmationEmail(data: {
             <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:15px;">${brand}</p>
           </div>
           <div style="padding:32px 40px;">
-            <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi ${data.name},</p>
+            <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi ${e.name},</p>
             <p style="font-size:15px;color:#374151;line-height:1.6;">
               Thanks for subscribing! To complete your signup and start receiving our updates,
               please confirm your email address by clicking the button below.
             </p>
             <div style="text-align:center;margin:32px 0;">
-              <a href="${data.confirmUrl}"
+              <a href="${e.confirmUrl}"
                  style="display:inline-block;background:#f97316;color:#fff;padding:14px 32px;
                         border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">
                 Confirm My Subscription
@@ -834,7 +858,7 @@ export async function sendNewsletterConfirmationEmail(data: {
             </p>
             <p style="font-size:12px;color:#9ca3af;margin-top:8px;">
               Or copy this URL into your browser:<br/>
-              <span style="color:#f97316;word-break:break-all;">${data.confirmUrl}</span>
+              <span style="color:#f97316;word-break:break-all;">${e.confirmUrl}</span>
             </p>
           </div>
           <div style="background:#f9fafb;padding:16px 40px;text-align:center;">
@@ -857,6 +881,7 @@ export async function sendNewsletterWelcomeEmail(data: {
   email: string;
   interest: string;
 }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
   try {
     const brand = getBrandName();
     const frontendUrl = getFrontendUrl();
@@ -871,10 +896,10 @@ export async function sendNewsletterWelcomeEmail(data: {
             <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:15px;">${brand}</p>
           </div>
           <div style="padding:32px 40px;">
-            <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi ${data.name},</p>
+            <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi ${e.name},</p>
             <p style="font-size:15px;color:#374151;line-height:1.6;">
               Your subscription has been confirmed. You'll now receive our latest updates,
-              insights, and news on <strong>${data.interest}</strong>.
+              insights, and news on <strong>${e.interest}</strong>.
             </p>
             <div style="margin:24px 0;padding:20px;background:#fff7ed;border-left:4px solid #f97316;border-radius:4px;">
               <p style="margin:0;color:#374151;font-size:14px;">

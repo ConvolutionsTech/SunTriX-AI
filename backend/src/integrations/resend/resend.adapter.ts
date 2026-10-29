@@ -7,10 +7,6 @@ export class ResendAdapter {
     return new Resend(apiKey || "re_dummy_key");
   }
 
-  private getFromAddress(): string {
-    return getSetting("EMAIL_FROM", "SunTriX <notifications@suntrix.com>");
-  }
-
   public get emails(): any {
     const client = this.getClient();
     return client.emails;
@@ -25,12 +21,12 @@ export class ResendAdapter {
     to: string | string[];
     subject: string;
     html: string;
-    from?: string;
+    from: string;
   }): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
       const client = this.getClient();
       const res = await client.emails.send({
-        from: params.from || this.getFromAddress(),
+        from: params.from,
         to: Array.isArray(params.to) ? params.to : [params.to],
         subject: params.subject,
         html: params.html,
@@ -46,12 +42,12 @@ export class ResendAdapter {
   }
 
   async sendBatchEmails(
-    emails: Array<{ to: string[]; subject: string; html: string; from?: string }>
+    emails: Array<{ to: string[]; subject: string; html: string; from: string }>
   ): Promise<{ success: boolean; count: number; error?: string }> {
     try {
       const client = this.getClient();
       const payload = emails.map((e) => ({
-        from: e.from || this.getFromAddress(),
+        from: e.from,
         to: e.to,
         subject: e.subject,
         html: e.html,
