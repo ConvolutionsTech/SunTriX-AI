@@ -31,6 +31,7 @@ export const EnvSchema = z
     CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
     CLOUDINARY_API_KEY: z.string().min(1).optional(),
     CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+    TRUST_PROXY: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.JWT_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
@@ -56,6 +57,10 @@ export function validateEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (!result.success) {
     const problems = result.error.issues.map((i) => `  - ${i.message}`).join("\n");
     throw new Error(`Invalid environment configuration:\n${problems}`);
+  }
+
+  if (result.data.NODE_ENV === "production" && !result.data.TRUST_PROXY) {
+    console.warn("⚠️  TRUST_PROXY is not set: behind a load balancer every client shares one rate-limit bucket. Set it to the number of proxies in front of the app.");
   }
 
   if (result.data.NODE_ENV !== "production") {

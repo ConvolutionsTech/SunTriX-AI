@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
 import { validateEnv } from "./config/env";
+import { parseTrustProxy } from "./lib/trustProxy";
 import { errorHandler } from "./middleware/errorHandler";
 
 // Route imports
@@ -38,8 +39,9 @@ import { startScheduler } from "./lib/scheduler";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ─── Trust Proxy (Required for reverse proxies like Render/Vercel/Nginx) ──
-app.set("trust proxy", 1);
+// ─── Trust Proxy ──────────────────────────────────────────────────
+// See lib/trustProxy.ts — unset TRUST_PROXY trusts no proxy, so clients can't spoof req.ip
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
 
 // ─── Security ────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));

@@ -18,7 +18,7 @@ import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry"
 // Secrets and deployment parameters come from the environment only. DB rows for these
 // keys are ignored at load time, and the settings API can neither read nor write them.
 const ENV_ONLY_PREFIXES = ["JWT_", "STRIPE_", "CLOUDINARY_"];
-const ENV_ONLY_KEYS = new Set(["RESEND_API_KEY", "GROQ_API_KEY", "MONGODB_URI", "FRONTEND_URL", "NODE_ENV", "PORT"]);
+const ENV_ONLY_KEYS = new Set(["RESEND_API_KEY", "GROQ_API_KEY", "MONGODB_URI", "FRONTEND_URL", "NODE_ENV", "PORT", "TRUST_PROXY"]);
 
 export function isEnvOnlySetting(key: string): boolean {
   return ENV_ONLY_KEYS.has(key) || ENV_ONLY_PREFIXES.some((p) => key.startsWith(p));

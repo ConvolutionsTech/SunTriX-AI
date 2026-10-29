@@ -17,7 +17,8 @@ router.get("/:token", async (req: Request, res: Response, next: NextFunction) =>
 // POST /contracts/:token/sign — PUBLIC client signs contract
 router.post("/:token/sign", validate(ContractSignSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const clientIp = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "").split(",")[0].trim();
+    // Resolved by Express according to TRUST_PROXY — never the raw, client-controlled header
+    const clientIp = req.ip || req.socket.remoteAddress || "";
     const userAgent = req.headers["user-agent"] || "";
 
     const result = await contractService.signContract({

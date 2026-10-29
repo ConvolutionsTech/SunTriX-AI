@@ -7,6 +7,9 @@
  */
 process.env.NODE_ENV = "test";
 
+// Tests simulate distinct clients with X-Forwarded-For
+process.env.TRUST_PROXY ||= "1";
+
 // Deterministic signing key so tests that mint JWTs agree with requireAuth
 process.env.JWT_SECRET ||= "test_jwt_secret_min_64_chars_long_key_string_for_testing_1234567890";
 
