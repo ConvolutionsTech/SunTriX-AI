@@ -20,7 +20,7 @@ const Navbar = () => {
 
   useEffect(() => {
     apiRequest<any[]>(ENDPOINTS.DEPARTMENTS_LIST).then(({ data }) => {
-      if (data) {
+      if (Array.isArray(data)) {
         setServices(data.map(d => ({
           name: d.name,
           desc: d.subtitle,
