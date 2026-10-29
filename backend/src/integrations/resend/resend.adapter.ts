@@ -3,10 +3,10 @@ import { getSetting } from "../../lib/configLoader";
 import { emailSends } from "../../lib/metrics";
 
 /** Counts every Resend call by outcome (Resend reports most failures as { error }, not a throw). */
-function counted<T extends { error?: unknown }>(kind: "single" | "batch", send: (payload: any) => Promise<T>) {
-  return async (payload: any): Promise<T> => {
+function counted<T extends { error?: unknown }>(kind: "single" | "batch", send: (payload: any, options?: any) => Promise<T>) {
+  return async (payload: any, options?: any): Promise<T> => {
     try {
-      const res = await send(payload);
+      const res = await send(payload, options);
       emailSends.inc({ kind, result: res?.error ? "error" : "ok" });
       return res;
     } catch (err) {
@@ -26,12 +26,12 @@ export class ResendAdapter {
 
   public get emails(): any {
     const client = this.getClient();
-    return { send: counted("single", (payload: any) => client.emails.send(payload)) };
+    return { send: counted("single", (payload: any, options?: any) => client.emails.send(payload, options)) };
   }
 
   public get batch(): any {
     const client = this.getClient();
-    return { send: counted("batch", (payload: any) => client.batch.send(payload)) };
+    return { send: counted("batch", (payload: any, options?: any) => client.batch.send(payload, options)) };
   }
 
   async sendEmail(params: {

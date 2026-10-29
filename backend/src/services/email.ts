@@ -381,15 +381,22 @@ function withUnsubscribeFooter(htmlBody: string, unsubscribeUrl: string): string
 </div>`;
 }
 
-export async function sendNewsletterBroadcast(
+/** Recipients per Resend batch call (Admin → Settings, max 100). */
+export function getNewsletterBatchSize(): number {
+  return Math.min(Math.max(getBatchSize() || 100, 1), 100);
+}
+
+/**
+ * Send one batch of a newsletter (each recipient gets their own unsubscribe
+ * link). The idempotency key makes a re-send after a crash a no-op at Resend.
+ */
+export async function sendNewsletterBatch(
   subject: string,
   htmlBody: string,
-  recipients: BroadcastRecipient[]
-): Promise<{ sentCount: number; error?: string }> {
-  let sentCount = 0;
-  if (!recipients.length) return { sentCount };
-
-  const BATCH_SIZE = getBatchSize();
+  recipients: BroadcastRecipient[],
+  idempotencyKey?: string
+): Promise<{ error?: string }> {
+  if (!recipients.length) return {};
   const emails = recipients.map((r) => ({
     from: getFromAddress(),
     to: [r.email],
@@ -397,22 +404,17 @@ export async function sendNewsletterBroadcast(
     html: withUnsubscribeFooter(htmlBody, r.unsubscribeUrl),
     headers: { "List-Unsubscribe": `<${r.unsubscribeUrl}>` },
   }));
-
   try {
-    for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-      const batch = emails.slice(i, i + BATCH_SIZE);
-      const { error } = await getResend().batch.send(batch);
-      if (error) {
-        // Includes Resend test mode ("testing email address" restriction): nothing was delivered
-        logger.error({ err: error }, "Resend Batch Error");
-        return { sentCount, error: error.message };
-      }
-      sentCount += batch.length;
+    const { error } = await getResend().batch.send(emails, idempotencyKey ? { idempotencyKey } : undefined);
+    if (error) {
+      // Includes Resend test mode ("testing email address" restriction): nothing in this batch was delivered
+      logger.error({ err: error }, "Resend Batch Error");
+      return { error: error.message || String(error) };
     }
-    return { sentCount };
+    return {};
   } catch (err: any) {
-    logger.error({ err }, "Broadcast failed");
-    return { sentCount, error: err.message || "Failed to broadcast" };
+    logger.error({ err }, "Newsletter batch failed");
+    return { error: err.message || "Failed to send batch" };
   }
 }
 

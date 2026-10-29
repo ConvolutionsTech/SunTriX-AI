@@ -8,18 +8,19 @@ import Campaign from "../models/Campaign";
 import { getSetting, refreshSettingsIfChanged } from "./configLoader";
 import { logger } from "./logger";
 import { drainEmailOutbox } from "./emailOutbox";
+import { dispatchCampaigns } from "../jobs/campaignDispatcher";
 
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
-// A broadcast runs in the background of the instance that queued it; one that
-// hasn't finished after this long was lost to a restart or crash.
+// Campaigns from before the durable dispatcher ran in the memory of one process
+// (no lease); one that hasn't finished after this long was lost to a restart.
 const STALE_CAMPAIGN_MS = 30 * 60 * 1000;
 
 let tasks: ScheduledTask[] = [];
 
-/** Marks campaigns orphaned by a restart as failed so the admin can retry them. */
+/** Marks legacy (lease-less) campaigns orphaned by a restart as failed so the admin can retry them. */
 export async function failInterruptedCampaigns(now = new Date()): Promise<number> {
   const result = await Campaign.updateMany(
-    { status: { $in: ["pending", "sending"] }, updatedAt: { $lt: new Date(now.getTime() - STALE_CAMPAIGN_MS) } },
+    { status: { $in: ["pending", "sending"] }, lockedUntil: { $exists: false }, updatedAt: { $lt: new Date(now.getTime() - STALE_CAMPAIGN_MS) } },
     { $set: { status: "failed", errorMessage: "Interrupted by a server restart — use Retry to send to the remaining recipients." } }
   );
   if (result.modifiedCount > 0) logger.warn(`[Scheduler] Marked ${result.modifiedCount} interrupted campaign(s) as failed`);
@@ -54,6 +55,11 @@ export function startScheduler(): void {
   // ── Every 15 seconds: deliver queued email (retries with backoff) ──────
   schedule("*/15 * * * * *", () => {
     drainEmailOutbox().catch((err) => logger.error({ err }, "[Scheduler] Email outbox drain failed"));
+  });
+
+  // ── Every 30 seconds: deliver queued newsletter campaigns (resumes after crashes) ─
+  schedule("*/30 * * * * *", () => {
+    dispatchCampaigns().catch((err) => logger.error({ err }, "[Scheduler] Campaign dispatch failed"));
   });
 
   // ── Every 5 minutes: finish post-payment work that failed the first time ───

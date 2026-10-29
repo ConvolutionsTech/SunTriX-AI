@@ -850,6 +850,8 @@ POST /v1/newsletter/broadcast
 
 ---
 
+**Delivery (durable dispatcher).** Sending a broadcast stores one `CampaignRecipient` row per subscriber and returns at once (`202`, campaign `queued`). A dispatcher job (every 30 s, and immediately after queueing) leases one campaign at a time, sends pending recipients in Resend batches (size `NEWSLETTER_BATCH_SIZE`, max 100, each with an idempotency key) and marks every recipient `sent` or `failed`. If the server restarts mid-send, the lease expires after 2 minutes and the next run, on any instance, carries on without re-sending delivered rows. A campaign ends `sent`, `partially_failed` or `failed`; failures email the admin. **Retry failed** in Admin → Newsletter → Broadcast History re-queues only the failed recipients.
+
 ## 6. Data Models (MongoDB Schemas)
 
 ### 6.1 Admin

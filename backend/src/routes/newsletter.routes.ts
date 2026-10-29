@@ -8,6 +8,15 @@ import { getSetting } from "../lib/configLoader";
 import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail, BroadcastRecipient } from "../services/email";
 import { validate, NewsletterSubscribeSchema, NewsletterBroadcastSchema } from "../middleware/validate";
 import { logger } from "../lib/logger";
+import { logAudit } from "../lib/audit";
+import CampaignRecipient from "../models/CampaignRecipient";
+import { dispatchCampaigns, queueCampaignRecipients, requeueFailedRecipients } from "../jobs/campaignDispatcher";
+
+function kickDispatcher(): void {
+  setImmediate(() => {
+    dispatchCampaigns().catch((err) => logger.error({ err }, "[Newsletter] Dispatcher run failed"));
+  });
+}
 import { formLimiter } from "../middleware/rateLimiters";
 
 const router = Router();
@@ -165,7 +174,7 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
       ? `${body}\n<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center;">${footerText}</div>`
       : body;
 
-    // Create campaign record immediately with status "pending"
+    // Snapshot the audience; the dispatcher (jobs/campaignDispatcher.ts) delivers it durably
     const campaign = await Campaign.create({
       subject,
       htmlBody: finalBody,
@@ -173,57 +182,21 @@ const broadcastHandler = async (req: AuthRequest, res: Response, next: NextFunct
       recipientCount: emails.length,
       adminId: req.user?.id || "unknown",
       adminName: req.user?.name || "Admin",
-      status: "pending",
+      status: "queued",
     });
+    await queueCampaignRecipients(campaign._id, recipients);
+    await logAudit(req, "broadcast", "campaign", campaign._id.toString(), subject, { recipients: emails.length, targetAudience });
 
-    // Respond immediately — do NOT block the HTTP request on email delivery
     res.status(202).json({
       message: `Broadcast queued for ${emails.length} subscriber${emails.length !== 1 ? "s" : ""}. Sending in background.`,
       recipientCount: emails.length,
       campaignId: campaign._id.toString(),
       campaign,
-      status: "pending",
+      status: "queued",
     });
 
-    // Fire-and-forget: send emails in background after response is flushed
-    setImmediate(async () => {
-      try {
-        await Campaign.findByIdAndUpdate(campaign._id, { status: "sending" });
-        const { sendNewsletterBroadcast, sendCampaignFailureNotification } = await import("../services/email");
-        
-        const { sentCount, error } = await sendNewsletterBroadcast(subject, finalBody, recipients);
-
-        if (error) {
-          logger.error(`[Newsletter] Broadcast failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
-          await Campaign.findByIdAndUpdate(campaign._id, {
-            status: "failed",
-            sentCount,
-            errorMessage: error.substring(0, 500),
-          }).catch(() => {});
-          
-          await sendCampaignFailureNotification({
-            subject,
-            sentCount,
-            totalCount: emails.length,
-            errorMessage: error,
-          });
-        } else {
-          await Campaign.findByIdAndUpdate(campaign._id, {
-            status: "sent",
-            sentCount,
-            sentAt: new Date(),
-          });
-          logger.info(`[Newsletter] Broadcast complete: campaign=${campaign._id}, recipients=${emails.length}`);
-        }
-      } catch (err: any) {
-        const errMsg = err?.message || String(err);
-        logger.error({ campaignId: String(campaign._id), err: errMsg }, "[Newsletter] Broadcast crashed unexpectedly");
-        await Campaign.findByIdAndUpdate(campaign._id, {
-          status: "failed",
-          errorMessage: errMsg.substring(0, 500),
-        }).catch(() => {});
-      }
-    });
+    // Start right away rather than waiting for the next scheduler tick
+    kickDispatcher();
   } catch (err) { next(err); }
 };
 
@@ -235,75 +208,42 @@ router.post("/campaigns", requireAuth, requireRole("admin"), validate(Newsletter
 // ADMIN: POST /newsletter/admin/campaigns/:id/retry
 // Retries a failed campaign. Only sends to recipients that haven't received it yet.
 // ─────────────────────────────────────────────────────────────────
-router.post("/admin/campaigns/:id/retry", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/admin/campaigns/:id/retry", requireAuth, requireRole("admin"), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign) return next(createError("Campaign not found", 404));
-    
-    if (campaign.status !== "failed") {
+    if (campaign.status !== "failed" && campaign.status !== "partially_failed") {
       return next(createError("Only failed campaigns can be retried", 400));
     }
 
-    // Same audience query and order as the original send, resumed after the sent count
-    const recipients = await audienceRecipients(campaign.targetAudience);
-    const remainingEmails = recipients.slice(campaign.sentCount);
-    if (remainingEmails.length === 0) {
-      // Edge case: all sent but marked failed? Just mark as sent.
+    let requeued: number;
+    if (await CampaignRecipient.exists({ campaignId: campaign._id })) {
+      requeued = await requeueFailedRecipients(campaign._id);
+    } else {
+      // Campaign from before per-recipient tracking: resume after the sent count, same order as the original send
+      const audience = await audienceRecipients(campaign.targetAudience);
+      await queueCampaignRecipients(campaign._id, audience, campaign.sentCount);
+      requeued = Math.max(audience.length - campaign.sentCount, 0);
+    }
+
+    if (requeued === 0) {
       campaign.status = "sent";
-      campaign.sentAt = new Date();
+      campaign.sentAt = campaign.sentAt ?? new Date();
       await campaign.save();
       return res.json({ message: "Campaign was already fully sent", campaign });
     }
 
-    campaign.status = "sending";
+    campaign.status = "queued";
     campaign.errorMessage = "";
     await campaign.save();
+    await logAudit(req, "broadcast", "campaign", campaign._id.toString(), `Retry: ${campaign.subject}`, { recipients: requeued });
 
     res.json({
-      message: `Retrying campaign for remaining ${remainingEmails.length} subscriber(s). Sending in background.`,
+      message: `Retrying campaign for ${requeued} subscriber(s). Sending in background.`,
       campaignId: campaign._id.toString(),
-      status: "sending"
+      status: "queued",
     });
-
-    setImmediate(async () => {
-      try {
-        const { sendNewsletterBroadcast, sendCampaignFailureNotification } = await import("../services/email");
-        const { sentCount, error } = await sendNewsletterBroadcast(campaign.subject, campaign.htmlBody, remainingEmails);
-        
-        const newTotalSentCount = campaign.sentCount + sentCount;
-        
-        if (error) {
-          logger.error(`[Newsletter] Retry failed: campaign=${campaign._id}, sent=${sentCount}, err=${error}`);
-          await Campaign.findByIdAndUpdate(campaign._id, {
-            status: "failed",
-            sentCount: newTotalSentCount,
-            errorMessage: error.substring(0, 500),
-          }).catch(() => {});
-          
-          await sendCampaignFailureNotification({
-            subject: campaign.subject,
-            sentCount: newTotalSentCount,
-            totalCount: campaign.recipientCount,
-            errorMessage: error,
-          });
-        } else {
-          await Campaign.findByIdAndUpdate(campaign._id, {
-            status: "sent",
-            sentCount: newTotalSentCount,
-            sentAt: new Date(),
-          });
-          logger.info(`[Newsletter] Retry complete: campaign=${campaign._id}, remaining recipients=${remainingEmails.length}`);
-        }
-      } catch (err: any) {
-        const errMsg = err?.message || String(err);
-        logger.error({ campaignId: String(campaign._id), err: errMsg }, "[Newsletter] Retry crashed unexpectedly");
-        await Campaign.findByIdAndUpdate(campaign._id, {
-          status: "failed",
-          errorMessage: errMsg.substring(0, 500),
-        }).catch(() => {});
-      }
-    });
-
+    kickDispatcher();
   } catch (err) { next(err); }
 });
 

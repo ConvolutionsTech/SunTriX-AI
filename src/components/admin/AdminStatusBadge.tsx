@@ -34,6 +34,9 @@ const statusMap: Record<string, { label: string; category: StatusCategory }> = {
   contract_signed: { label: "Contract Signed", category: "success" },
   changes_requested: { label: "Changes Requested", category: "warning" },
   processing: { label: "Processing", category: "info" },
+  queued: { label: "Queued", category: "info" },
+  sending: { label: "Sending", category: "info" },
+  partially_failed: { label: "Partially Failed", category: "warning" },
   in_progress: { label: "In Progress", category: "info" },
 
   // Error / Cancelled states

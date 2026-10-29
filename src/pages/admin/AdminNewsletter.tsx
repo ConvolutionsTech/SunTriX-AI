@@ -14,8 +14,11 @@ interface Campaign {
   _id: string;
   subject: string;
   targetAudience: string;
-  status: "sent" | "failed" | "pending";
+  status: "queued" | "sending" | "sent" | "partially_failed" | "failed" | "pending";
   recipientCount: number;
+  sentCount?: number;
+  failedCount?: number;
+  errorMessage?: string;
   openRate?: number;
   sentAt?: string;
   createdAt: string;
@@ -67,6 +70,16 @@ export const AdminNewsletter = () => {
   useEffect(() => {
     fetchSubs();
   }, []);
+
+  const retryCampaign = async (id: string) => {
+    const { data, error } = await apiRequest<{ message: string }>(ENDPOINTS.CAMPAIGN_RETRY(id), { method: "POST" });
+    if (error) {
+      toast({ title: "Retry failed", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Retry queued", description: data?.message });
+    fetchSubs();
+  };
 
   const handleGenerateAI = async () => {
     if (!aiPrompt.trim()) return;
@@ -496,6 +509,7 @@ export const AdminNewsletter = () => {
                   <th className="px-4 py-3">Recipients</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Sent At</th>
+                  <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -503,12 +517,25 @@ export const AdminNewsletter = () => {
                   <tr key={c._id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-4 py-3.5 font-semibold text-foreground">{c.subject}</td>
                     <td className="px-4 py-3.5 font-mono text-muted-foreground">{c.targetAudience}</td>
-                    <td className="px-4 py-3.5 font-mono font-bold text-foreground">{c.recipientCount}</td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3.5 font-mono font-bold text-foreground">
+                      {c.sentCount !== undefined && c.status !== "sent" ? `${c.sentCount} / ${c.recipientCount}` : c.recipientCount}
+                    </td>
+                    <td className="px-4 py-3.5" title={c.errorMessage || undefined}>
                       <AdminStatusBadge status={c.status} />
+                      {!!c.failedCount && <span className="ml-2 text-rose-600">{c.failedCount} failed</span>}
                     </td>
                     <td className="px-4 py-3.5 font-mono text-muted-foreground">
                       {new Date(c.sentAt || c.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {(c.status === "failed" || c.status === "partially_failed") && (
+                        <button
+                          onClick={() => retryCampaign(c._id)}
+                          className="px-2.5 py-1 rounded-md border border-border text-xs font-semibold hover:bg-muted"
+                        >
+                          Retry failed
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

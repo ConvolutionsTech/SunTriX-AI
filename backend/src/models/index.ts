@@ -2,6 +2,7 @@
 import "./Admin";
 import "./AuditLog";
 import "./Campaign";
+import "./CampaignRecipient";
 import "./CaseStudy";
 import "./Client";
 import "./CmsContent";

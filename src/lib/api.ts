@@ -191,6 +191,7 @@ export const ENDPOINTS = {
 
   // Campaigns
   CAMPAIGN_LIST: `${BASE_URL}/newsletter/campaigns`,
+  CAMPAIGN_RETRY: (id: string) => `${BASE_URL}/newsletter/admin/campaigns/${id}/retry`,
   CAMPAIGN_CREATE: `${BASE_URL}/newsletter/campaigns`,
 
   // Assets (Cloudinary via backend)
