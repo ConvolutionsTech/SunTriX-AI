@@ -1,6 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
-import mongoose from "mongoose";
-import { connectDB } from "../config/db";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { proposalService } from "../modules/proposals/proposal.service";
 import { contractService } from "../modules/contracts/contract.service";
@@ -8,19 +6,17 @@ import { paymentService } from "../modules/payments/payment.service";
 import TaskRequest from "../models/TaskRequest";
 import ProjectTracker from "../models/ProjectTracker";
 import * as groqService from "../services/groq";
-
-import dotenv from "dotenv";
-dotenv.config();
+import { connectTestDb, disconnectTestDb } from "./helpers/db";
 
 describe("Phase 5.15 Full End-to-End Business Lifecycle Test", () => {
   beforeAll(async () => {
-    if (!process.env.MONGODB_URI) {
-      process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/suntrix_test";
-    }
-    if (mongoose.connection.readyState === 0) {
-      await connectDB();
-    }
+    await connectTestDb();
     vi.spyOn(groqService, "generateContractWithAI").mockResolvedValue("Mocked Legal Contract Text for automated test.");
+  }, 120000);
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await disconnectTestDb();
   });
 
   it("should execute complete lifecycle: Submission -> Proposal -> Contract -> Project Hub -> Invoice Payment", async () => {

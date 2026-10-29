@@ -36,7 +36,7 @@ Notes:
 - Backend tests make real outbound calls to Resend/Groq when keys are unset (they log "API key is invalid").
 - Secrets are env-only: `JWT_*`, `STRIPE_*`, `RESEND_API_KEY`, `CLOUDINARY_API_KEY/SECRET`, `MONGODB_URI` (`isEnvOnlySetting` in `lib/configLoader.ts`). DB rows for these are ignored and the settings API refuses them.
 - `npm run seed` references `src/seed.ts`, which does not exist in the repo.
-- Some backend tests (`fullLifecycle`, `phase1_critical_verification`) hit a real MongoDB — they use `MONGODB_URI` or fall back to `mongodb://127.0.0.1:27017/suntrix_test`.
+- DB tests use `src/test/helpers/db.ts` (`connectTestDb` / `clearTestDb` / `disconnectTestDb`): an in-memory mongod via `mongodb-memory-server`, or `MONGODB_TEST_URI` if set (must be local and contain `_test`). Never call `connectDB()` from tests.
 - Backend env: copy `backend/.env.example` to `backend/.env`. Frontend reads `VITE_API_URL` (defaults to `http://localhost:4000/v1`).
 
 ## Backend architecture
