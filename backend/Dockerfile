@@ -1,50 +1,46 @@
 # ------------------------------------
 # Stage 1: Builder
 # ------------------------------------
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files first to leverage Docker layer caching
-COPY package*.json ./
+# Install exactly what the lockfile pins (dev deps are needed for tsc)
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Install ALL dependencies (including dev dependencies required for TypeScript build)
-RUN npm install
-
-# Copy the rest of the application source code
-COPY . .
-
-# Build the TypeScript project into the /dist folder
+# Copy only what the build needs (tests are excluded by .dockerignore and tsconfig.build.json)
+COPY tsconfig.json tsconfig.build.json ./
+COPY src ./src
 RUN npm run build
 
 # ------------------------------------
 # Stage 2: Production
 # ------------------------------------
-FROM node:20-alpine
+FROM node:22-alpine
 
-# Set the environment variable for production optimizations
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+
 ENV NODE_ENV=production
 
-# Switch to the secure, non-root 'node' user provided by the alpine image
-USER node
+# Create the app dir as root and hand it to the non-root 'node' user,
+# so this works on both BuildKit and the legacy builder
 WORKDIR /app
+RUN chown node:node /app
+USER node
 
-# Copy package files and ensure correct ownership
-COPY --chown=node:node package*.json ./
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Install ONLY production dependencies, ignoring all devDependencies
-RUN npm install --omit=dev
-
-# Copy the compiled output from the builder stage
 COPY --from=builder --chown=node:node /app/dist ./dist
 
-# Expose the backend API port
 EXPOSE 4000
 
-# Add a healthcheck so orchestrators know if the app is actually responding
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Start period covers the worst-case MongoDB connect retry in config/db.ts (~70s).
+# Switch to /ready once T-OPB-9 adds a DB-aware readiness endpoint.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
   CMD node -e "require('http').get('http://localhost:4000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-# Start the application using 'node' directly rather than 'npm start'
-# This reduces memory overhead and improves signal handling (SIGTERM)
+# Run node directly (not npm start) for lower overhead and correct SIGTERM handling
 CMD ["node", "dist/app.js"]
