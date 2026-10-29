@@ -37,7 +37,7 @@ Notes:
 - Secrets are env-only: `JWT_*`, `STRIPE_*`, `RESEND_API_KEY`, `CLOUDINARY_API_KEY/SECRET`, `MONGODB_URI` (`isEnvOnlySetting` in `lib/configLoader.ts`). DB rows for these are ignored and the settings API refuses them.
 - First admin: `npm run seed:admin` (idempotent; `ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` ≥ 12 chars/`ADMIN_SEED_NAME`). In a built image use `npm run seed:admin:prod`.
 - DB tests use `src/test/helpers/db.ts` (`connectTestDb` / `clearTestDb` / `disconnectTestDb`): an in-memory mongod via `mongodb-memory-server`, or `MONGODB_TEST_URI` if set (must be local and contain `_test`). Never call `connectDB()` from tests.
-- Backend env: copy `backend/.env.example` to `backend/.env`. Frontend reads `VITE_API_URL` (defaults to `http://localhost:4000/v1`).
+- Backend env: copy `backend/.env.example` to `backend/.env` (it documents every key and marks env-only vs DB-overridable). `src/config/env.ts` validates env at startup and refuses to boot if `MONGODB_URI`, `JWT_SECRET`/`JWT_REFRESH_SECRET` (≥ 32 chars, different) or `FRONTEND_URL` are missing, or — in production — any Stripe/Resend/Cloudinary secret. Frontend reads `VITE_API_URL` (defaults to `http://localhost:4000/v1`).
 
 ## Backend architecture
 

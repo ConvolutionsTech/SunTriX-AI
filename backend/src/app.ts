@@ -7,6 +7,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
+import { validateEnv } from "./config/env";
 import { errorHandler } from "./middleware/errorHandler";
 
 // Route imports
@@ -200,6 +201,7 @@ app.use(errorHandler);
 
 // ─── Start ────────────────────────────────────────────────────────
 async function start() {
+  validateEnv();
   await connectDB();
   // Load all settings into process.env before any route runs
   await loadSettingsFromDB();
