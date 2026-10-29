@@ -145,7 +145,7 @@ describe("apiUpload (T-FE-9)", () => {
     form.append("file", new Blob(["x"]), "a.png");
     const res = await apiUpload<{ url: string }>(ENDPOINTS.UPLOAD_IMAGE, form);
 
-    expect(res).toEqual({ data: { url: "https://cdn.test/a.png" }, error: null });
+    expect(res).toMatchObject({ data: { url: "https://cdn.test/a.png" }, error: null, status: 201 });
     const lastInit = fetchMock.mock.calls.at(-1)![1] as RequestInit;
     expect(lastInit.body).toBe(form);
     expect((lastInit.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
@@ -158,6 +158,27 @@ describe("apiUpload (T-FE-9)", () => {
 
     const res = await apiUpload(ENDPOINTS.UPLOAD_IMAGE, new FormData());
     expect(res.error).toBe("File too large (max 50 MB)");
+  });
+});
+
+describe("error messages (T-FE-10, M13)", () => {
+  it.each([
+    [{ message: "Post not found" }, 404, "Post not found"],
+    [{ error: "Too many submissions. Please try again in an hour." }, 429, "Too many submissions. Please try again in an hour."],
+    [{ error: "Validation failed", details: [{ field: "message", message: "Message is required" }] }, 400, "message: Message is required"],
+    [{}, 429, "Too many requests — please wait a moment and try again."],
+    [{}, 503, "The server ran into a problem. Please try again shortly."],
+    [null, 404, "Request failed (404)"],
+  ])("%j with %i → %s", async (body, status, expected) => {
+    const { errorMessage } = await load();
+    expect(errorMessage(body, status)).toBe(expected);
+  });
+
+  it("returns the HTTP status so pages can tell errors apart", async () => {
+    const { apiRequest, ENDPOINTS } = await load();
+    fetchMock.mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 }));
+    const res = await apiRequest(ENDPOINTS.TEAM_LIST);
+    expect(res).toEqual({ data: null, error: "The server ran into a problem. Please try again shortly.", status: 502 });
   });
 });
 

@@ -334,10 +334,30 @@ function getFreshToken(): Promise<string | null> {
   return refreshInFlight;
 }
 
+/**
+ * Human-readable message from any backend error body: `{ message }`,
+ * `{ error }`, or a validation failure `{ error, details: [{ field, message }] }`.
+ */
+export function errorMessage(body: unknown, status: number): string {
+  const b = (body && typeof body === "object" ? body : {}) as {
+    message?: unknown;
+    error?: unknown;
+    details?: Array<{ field?: string; message?: string }>;
+  };
+  if (Array.isArray(b.details) && b.details.length) {
+    return b.details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join("; ");
+  }
+  if (typeof b.message === "string" && b.message) return b.message;
+  if (typeof b.error === "string" && b.error) return b.error;
+  if (status === 429) return "Too many requests — please wait a moment and try again.";
+  if (status >= 500) return "The server ran into a problem. Please try again shortly.";
+  return `Request failed (${status})`;
+}
+
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
-): Promise<{ data: T | null; error: string | null }> {
+): Promise<{ data: T | null; error: string | null; status: number }> {
   const { method = "GET", body, headers = {}, auth = onAdminPage() } = options;
 
   const isForm = typeof FormData !== "undefined" && body instanceof FormData;
@@ -362,20 +382,20 @@ export async function apiRequest<T = unknown>(
       if (!token) {
         authManager.clear();
         redirectToLogin();
-        return { data: null, error: "Session expired. Please log in again." };
+        return { data: null, error: "Session expired. Please log in again.", status: 401 };
       }
       res = await send(token);
     }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { data: null, error: err.message || err.error || `Error ${res.status}` };
+      return { data: null, error: errorMessage(err, res.status), status: res.status };
     }
 
     const data = await res.json();
-    return { data, error: null };
+    return { data, error: null, status: res.status };
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : "Network error" };
+    return { data: null, error: err instanceof Error ? err.message : "Network error", status: 0 };
   }
 }
 
