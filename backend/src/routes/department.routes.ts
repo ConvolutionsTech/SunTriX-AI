@@ -1,15 +1,16 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Department from "../models/Department";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
 
 // GET /departments — public
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const showAll = req.query.all === "true" || req.headers.authorization?.startsWith("Bearer ");
+    // Hidden/draft items only for a verified staff token — never for a bare Bearer header
+    const showAll = !!req.user;
     const filter = showAll ? {} : { enabled: true };
     const depts = await Department.find(filter).sort({ order: 1 });
     res.json(depts);
@@ -57,9 +58,9 @@ router.post("/bulk/import", requireAuth, async (req: Request, res: Response, nex
 });
 
 // GET /departments/:id
-router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const dept = await Department.findById(req.params.id);
+    const dept = await Department.findOne({ _id: req.params.id, ...(req.user ? {} : { enabled: true }) });
     if (!dept) return next(createError("Department not found", 404));
     res.json(dept);
   } catch (err) {

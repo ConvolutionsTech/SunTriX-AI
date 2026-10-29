@@ -1,14 +1,14 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Testimonial from "../models/Testimonial";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
 // GET /testimonials — public
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const isAdmin = req.headers.authorization?.startsWith("Bearer ");
+    const isAdmin = !!req.user;
     const filter = isAdmin ? {} : { status: "published" };
     const testimonials = await Testimonial.find(filter).sort({ createdAt: -1 });
     res.json(testimonials);

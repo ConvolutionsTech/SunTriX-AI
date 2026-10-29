@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Post from "../models/Post";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
@@ -22,10 +22,10 @@ const sanitizeOptions = {
 const router = Router();
 
 // GET /posts — public: published posts with filters
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { tag, category, featured, limit = 20, skip = 0, all } = req.query;
-    const filter: Record<string, unknown> = all === "true" ? {} : { status: "published" };
+    const filter: Record<string, unknown> = req.user && all === "true" ? {} : { status: "published" };
     if (tag) filter.tags = tag;
     if (category) filter.category = category;
     if (featured === "true") filter.featured = true;

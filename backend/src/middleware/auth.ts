@@ -57,3 +57,22 @@ export function requireRole(...roles: string[]) {
 }
 
 export const requireAdmin = requireRole("admin");
+
+/**
+ * Identifies staff on public routes without requiring login: a valid token
+ * sets req.user, anything else (missing, malformed, expired) is treated as
+ * anonymous. Use it where staff see more than the public (drafts, hidden items).
+ */
+export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  const secret = getSetting("JWT_SECRET");
+  if (authHeader?.startsWith("Bearer ") && secret) {
+    try {
+      const decoded = jwt.verify(authHeader.split(" ")[1], secret) as { id: string; email: string; role: string; name: string };
+      if (ROLES.includes(decoded.role)) req.user = decoded;
+    } catch {
+      // Invalid token → anonymous
+    }
+  }
+  next();
+}

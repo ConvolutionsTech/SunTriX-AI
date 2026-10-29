@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Portfolio from "../models/Portfolio";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
@@ -8,9 +8,10 @@ import slugify from "slugify";
 const router = Router();
 
 // GET /portfolio  — public lists published; admin sees all
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const showAll = req.query.all === "true" || req.headers.authorization?.startsWith("Bearer ");
+    // Hidden/draft items only for a verified staff token — never for a bare Bearer header
+    const showAll = !!req.user;
     const filter = showAll ? {} : { status: "published" };
     const projects = await Portfolio.find(filter).sort({ order: 1, createdAt: -1 });
     res.json(projects);
@@ -18,9 +19,9 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /portfolio/slug/:slug  — public
-router.get("/slug/:slug", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/slug/:slug", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const project = await Portfolio.findOne({ slug: req.params.slug });
+    const project = await Portfolio.findOne({ slug: req.params.slug, ...(req.user ? {} : { status: "published" }) });
     if (!project) return next(createError("Project not found", 404));
     res.json(project);
   } catch (err) { next(err); }
@@ -82,9 +83,9 @@ router.post("/bulk/import", requireAuth, async (req: Request, res: Response, nex
 });
 
 // GET /portfolio/:id  — public
-router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const project = await Portfolio.findById(req.params.id);
+    const project = await Portfolio.findOne({ _id: req.params.id, ...(req.user ? {} : { status: "published" }) });
     if (!project) return next(createError("Project not found", 404));
     res.json(project);
   } catch (err) { next(err); }
