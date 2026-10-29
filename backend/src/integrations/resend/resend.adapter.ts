@@ -1,5 +1,20 @@
 import { Resend } from "resend";
 import { getSetting } from "../../lib/configLoader";
+import { emailSends } from "../../lib/metrics";
+
+/** Counts every Resend call by outcome (Resend reports most failures as { error }, not a throw). */
+function counted<T extends { error?: unknown }>(kind: "single" | "batch", send: (payload: any) => Promise<T>) {
+  return async (payload: any): Promise<T> => {
+    try {
+      const res = await send(payload);
+      emailSends.inc({ kind, result: res?.error ? "error" : "ok" });
+      return res;
+    } catch (err) {
+      emailSends.inc({ kind, result: "error" });
+      throw err;
+    }
+  };
+}
 
 export class ResendAdapter {
   private getClient(): Resend {
@@ -9,12 +24,12 @@ export class ResendAdapter {
 
   public get emails(): any {
     const client = this.getClient();
-    return client.emails;
+    return { send: counted("single", (payload: any) => client.emails.send(payload)) };
   }
 
   public get batch(): any {
     const client = this.getClient();
-    return client.batch;
+    return { send: counted("batch", (payload: any) => client.batch.send(payload)) };
   }
 
   async sendEmail(params: {
@@ -24,8 +39,7 @@ export class ResendAdapter {
     from: string;
   }): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
-      const client = this.getClient();
-      const res = await client.emails.send({
+      const res = await this.emails.send({
         from: params.from,
         to: Array.isArray(params.to) ? params.to : [params.to],
         subject: params.subject,
@@ -45,7 +59,6 @@ export class ResendAdapter {
     emails: Array<{ to: string[]; subject: string; html: string; from: string }>
   ): Promise<{ success: boolean; count: number; error?: string }> {
     try {
-      const client = this.getClient();
       const payload = emails.map((e) => ({
         from: e.from,
         to: e.to,
@@ -53,7 +66,7 @@ export class ResendAdapter {
         html: e.html,
       }));
 
-      const res = await client.batch.send(payload);
+      const res = await this.batch.send(payload);
       if (res.error) {
         return { success: false, count: 0, error: res.error.message };
       }

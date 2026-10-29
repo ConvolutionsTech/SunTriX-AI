@@ -4,6 +4,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { logger, httpLogger } from "./lib/logger";
+import { initSentry } from "./lib/sentry";
+import { metricsMiddleware, metricsHandler } from "./lib/metrics";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
@@ -39,6 +41,8 @@ import contractRoutes from "./routes/contract.routes";
 import { startScheduler, failInterruptedCampaigns } from "./lib/scheduler";
 import { checkReadiness, registerProcessHandlers } from "./lib/shutdown";
 
+initSentry();
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -48,6 +52,7 @@ app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
 
 // ─── Request logging (first, so every response — even a CORS or rate-limit rejection — has a request id) ──
 app.use(httpLogger());
+app.use(metricsMiddleware());
 
 // ─── Security ────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
@@ -80,7 +85,7 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
   // Orchestrator probes must never be throttled
-  skip: (req) => req.path === "/health" || req.path === "/ready",
+  skip: (req) => req.path === "/health" || req.path === "/ready" || req.path === "/metrics",
 });
 
 const authLimiter = rateLimit({
@@ -118,6 +123,7 @@ app.use(globalLimiter);
 // ─── Maintenance Mode ────────────────────────────────────────────
 const MAINTENANCE_BYPASS_PREFIXES = [
   "/ready",
+  "/metrics",
   "/health",
   "/v1/auth",
   "/v1/admin",
@@ -175,6 +181,9 @@ app.use(mongoSanitize({ replaceWith: "_" }));
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+// Prometheus scrape endpoint (404 unless METRICS_TOKEN is set)
+app.get("/metrics", metricsHandler());
 
 app.get("/ready", async (_req, res) => {
   const result = await checkReadiness();

@@ -8,6 +8,7 @@ import Payment from "../models/Payment";
 import TaskRequest from "../models/TaskRequest";
 import { toClientInvoice } from "../lib/clientDto";
 import { logger } from "../lib/logger";
+import { stripeWebhookEvents } from "../lib/metrics";
 
 const router = Router();
 
@@ -98,14 +99,17 @@ router.post("/webhook", async (req: Request, res: Response) => {
     const sig = req.headers["stripe-signature"] as string;
     const rawBody = req.body;
     const result = await paymentService.handleStripeWebhookEvent(rawBody, sig);
+    stripeWebhookEvents.inc({ type: result.eventType ?? "unknown", result: "duplicate" in result && result.duplicate ? "duplicate" : "ok" });
     res.json(result);
   } catch (err: any) {
     logger.error({ err }, "Stripe Webhook Error");
     // Bad signature/payload → 400 (not retried). Anything else — misconfiguration,
     // database or post-payment failures — → 500 so Stripe retries the event.
     if (err instanceof AppError && err.statusCode === 400) {
+      stripeWebhookEvents.inc({ type: "unknown", result: "invalid" });
       return res.status(400).json({ error: err.message, code: "WEBHOOK_INVALID" });
     }
+    stripeWebhookEvents.inc({ type: "unknown", result: "retry" });
     res.status(500).json({ error: "Webhook processing failed — Stripe will retry", code: "WEBHOOK_RETRY" });
   }
 });

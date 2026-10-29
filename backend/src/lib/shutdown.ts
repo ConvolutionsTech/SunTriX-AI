@@ -2,6 +2,7 @@ import type { Server } from "http";
 import mongoose from "mongoose";
 import { logger } from "./logger";
 import { stopScheduler } from "./scheduler";
+import { captureServerError, flushSentry } from "./sentry";
 
 let shuttingDown = false;
 
@@ -69,14 +70,13 @@ export function registerProcessHandlers(server: Server): void {
     process.once(signal, () => void gracefulShutdown(signal, { server }));
   }
   // An unknown state is worse than a restart: log and let the orchestrator restart us.
-  process.on("unhandledRejection", (reason) => {
-    logger.fatal({ err: reason }, "Unhandled promise rejection");
-    process.exit(1);
-  });
-  process.on("uncaughtException", (err) => {
-    logger.fatal({ err }, "Uncaught exception");
-    process.exit(1);
-  });
+  const crash = (err: unknown, msg: string) => {
+    logger.fatal({ err }, msg);
+    captureServerError(err, { status: 500 });
+    void flushSentry().finally(() => process.exit(1));
+  };
+  process.on("unhandledRejection", (reason) => crash(reason, "Unhandled promise rejection"));
+  process.on("uncaughtException", (err) => crash(err, "Uncaught exception"));
 }
 
 /** Test hook. */

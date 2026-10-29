@@ -1,6 +1,7 @@
 import Groq from "groq-sdk";
 import { getSetting } from "../../lib/configLoader";
 import { logger } from "../../lib/logger";
+import { groqRequests } from "../../lib/metrics";
 
 export interface DiscoveredModel {
   id: string;
@@ -152,15 +153,23 @@ export class GroqAdapter {
     logger.debug(`[GroqAdapter] Executing AI Request | Operation: ${params.operation || "chat"} | Model: ${model} | Temp: ${temperature}`);
 
     // Direct SDK call — exact configured model is sent without silent replacement
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: params.systemPrompt },
-        ...params.messages,
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    });
+    const operation = params.operation || "chat";
+    let response;
+    try {
+      response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: params.systemPrompt },
+          ...params.messages,
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      });
+      groqRequests.inc({ operation, result: "ok" });
+    } catch (err) {
+      groqRequests.inc({ operation, result: "error" });
+      throw err;
+    }
 
     return response.choices[0]?.message?.content || "";
   }

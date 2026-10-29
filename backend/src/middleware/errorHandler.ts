@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../shared/errors/appError";
 import { logger, redactUrl } from "../lib/logger";
+import { captureServerError } from "../lib/sentry";
 
 /**
  * Single error contract for every API response:
@@ -41,6 +42,7 @@ export function errorHandler(err: any, req: Request, res: Response, _next: NextF
 
   if (status >= 500) {
     logger.error({ err, reqId: requestId, method: req.method, url: redactUrl(req.originalUrl), status }, "Request failed");
+    captureServerError(err, { requestId, method: req.method, url: req.originalUrl, status });
   }
 
   const hideDetails = status >= 500 && process.env.NODE_ENV === "production";

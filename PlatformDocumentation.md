@@ -127,7 +127,7 @@ cp .env.example .env
 # 4. Start the development server (with hot reload)
 npm run dev
 # API running at: http://localhost:4000
-# Health check:   http://localhost:4000/health
+# Health check:   http://localhost:4000/health  (readiness incl. DB: /ready)
 ```
 
 ### 2.3 Local Frontend Setup
@@ -2038,6 +2038,47 @@ VITE_API_URL=https://suntrix-backend.onrender.com/v1
 1. Go to Admin → Settings
 2. Update the value
 3. Change takes effect immediately (settings loaded into process.env in-memory cache)
+
+---
+
+### 12.5 Operations: logs, health, metrics and alerts
+
+**Logs.** The API writes one JSON line per event (pino), pretty-printed only when `NODE_ENV=development`. Every request gets an `X-Request-Id` (an incoming one is reused if it is a plain id), and the same id appears in error responses (`requestId`) and in Sentry. Authorization headers, cookies, Stripe signatures and the token in capability links (`/proposals/view/:token`, `/contracts/:token`, `/payments/invoice/:token`, `/tracker/client/:token`, `/task-requests/track/:token`, newsletter and password-reset links) are never logged. Set the level with `LOG_LEVEL`.
+
+**Health.**
+
+| Endpoint | Meaning | Use it for |
+|---|---|---|
+| `GET /health` | The process is up (`{ "status": "ok" }`) | Liveness probe |
+| `GET /ready` | MongoDB answers a ping within 2 s and the process is not shutting down; otherwise `503 { status: "not_ready", reason }` | Readiness probe, load-balancer health check, Docker `HEALTHCHECK`, external uptime check |
+
+On `SIGTERM`/`SIGINT` the API fails `/ready`, stops the cron jobs, finishes in-flight requests, closes MongoDB and exits within 10 s. An unhandled rejection or uncaught exception is logged (and sent to Sentry) and the process exits with code 1 so the orchestrator restarts it.
+
+**Error tracking (optional).** Set `SENTRY_DSN` (backend) and `VITE_SENTRY_DSN` (frontend build) to report errors to Sentry. Only 5xx errors are reported from the API, tagged with `requestId`. Events carry no request bodies, headers, cookies, emails or capability tokens. `GIT_SHA` (if set) becomes the Sentry release. The frontend shows a "Something went wrong" page with a reload button instead of a blank screen when rendering crashes.
+
+**Metrics (optional).** Set `METRICS_TOKEN` to enable `GET /metrics` (Prometheus text format); scrape it with `Authorization: Bearer <METRICS_TOKEN>`. Without the token the endpoint returns 404.
+
+| Metric | Labels |
+|---|---|
+| `http_requests_total` | `route` (Express pattern, e.g. `/v1/contracts/:token`), `method`, `status` |
+| `http_request_duration_seconds` | `route`, `method` |
+| `stripe_webhook_events_total` | `type`, `result` = `ok` / `duplicate` / `invalid` / `retry` |
+| `groq_requests_total` | `operation`, `result` = `ok` / `error` |
+| `email_send_total` | `kind` = `single` / `batch`, `result` = `ok` / `error` |
+| Node defaults | heap, event-loop lag, GC, CPU, open handles |
+
+**Recommended alerts.**
+
+| Alert | Rule (PromQL or check) |
+|---|---|
+| API error rate | `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.02` |
+| Not ready | `/ready` failing for more than 2 minutes (uptime monitor, every minute) |
+| Stripe webhooks failing | `increase(stripe_webhook_events_total{result=~"invalid\|retry"}[15m]) > 0` — also check the Stripe dashboard's webhook page |
+| Groq spend | `increase(groq_requests_total[24h]) > <your daily budget>` |
+| Email failures | `increase(email_send_total{result="error"}[30m]) > 5` |
+| Latency | `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 2` |
+
+Post-payment work that fails after a successful payment is retried every 5 minutes and, if it keeps failing, emails `ADMIN_EMAIL` (see §13).
 
 ---
 
