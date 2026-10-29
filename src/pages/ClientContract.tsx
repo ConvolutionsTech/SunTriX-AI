@@ -30,7 +30,7 @@ const ClientContract = () => {
   const [agreed, setAgreed] = useState(false);
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
-  const [trackingToken, setTrackingToken] = useState("");
+  const [trackerToken, setTrackerToken] = useState("");
   const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
@@ -54,7 +54,7 @@ const ClientContract = () => {
   const handleSign = async () => {
     if (!sigName.trim() || !agreed || !token) return;
     setSigning(true);
-    const { data, error: err } = await apiRequest<{ trackingToken: string }>(
+    const { data, error: err } = await apiRequest<{ trackerToken: string }>(
       ENDPOINTS.CONTRACT_SIGN(token),
       { method: "POST", body: { clientSignatureName: sigName.trim(), agreed: true } }
     );
@@ -62,7 +62,7 @@ const ClientContract = () => {
     if (err) {
       setError(err);
     } else {
-      setTrackingToken(data?.trackingToken || "");
+      setTrackerToken(data?.trackerToken || "");
       setSigned(true);
     }
   };
@@ -103,9 +103,9 @@ const ClientContract = () => {
               Our team has been notified. They'll create your first milestone invoice and reach out to schedule your project kickoff.
             </p>
             <div className="space-y-3">
-              {trackingToken && (
+              {trackerToken && (
                 <Link
-                  to={`/client/project/${trackingToken}`}
+                  to={`/client/project/${trackerToken}`}
                   className="block w-full gradient-bg rounded-xl py-3 text-sm font-bold text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
                 >
                   Go to Project Hub →

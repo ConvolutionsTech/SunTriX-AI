@@ -45,6 +45,8 @@ interface Proposal {
   clientEmail: string;
   expiresAt: string;
   acceptedAt?: string;
+  /** Set once accepted — links to the generated contract */
+  contractToken?: string;
   clientNote?: string;
   taskRequestId?: {
     projectTitle: string;
@@ -76,7 +78,10 @@ const ClientProposal = () => {
         if (err || !data) setError(err || "Proposal not found.");
         else {
           setProposal(data);
-          if (data.status === "accepted") setPhase("accepted");
+          if (data.status === "accepted") {
+            setPhase("accepted");
+            setContractToken(data.contractToken || sessionStorage.getItem(`contract-for-${token}`) || "");
+          }
           if (data.status === "changes_requested") setPhase("changes_submitted");
         }
     };
@@ -96,6 +101,12 @@ const ClientProposal = () => {
       setPhase("view");
     } else {
       setContractToken(data.contractToken);
+      // Keep the "Review & Sign" link if the client refreshes this page
+      try {
+        sessionStorage.setItem(`contract-for-${token}`, data.contractToken);
+      } catch {
+        // Storage unavailable — the link still comes from the proposal once accepted
+      }
       setPhase("accepted");
     }
   };

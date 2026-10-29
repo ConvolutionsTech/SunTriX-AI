@@ -76,7 +76,6 @@ const GROK_API_URL = "https://api.x.ai/v1";
 export const ENDPOINTS = {
   // Auth
   AUTH_LOGIN: `${BASE_URL}/auth/login`,
-  AUTH_REGISTER: `${BASE_URL}/auth/register`,
   AUTH_LOGOUT: `${BASE_URL}/auth/logout`,
   AUTH_ME: `${BASE_URL}/auth/me`,
   AUTH_REFRESH: `${BASE_URL}/auth/refresh`,
@@ -98,7 +97,6 @@ export const ENDPOINTS = {
   // AI Chatbot (proxied through backend → Grok API)
   // Backend forwards to: https://api.x.ai/v1/chat/completions
   CHAT_SEND: `${BASE_URL}/chat`,
-  CHAT_HISTORY: `${BASE_URL}/chat/history`,
 
   // Portfolio & Case Studies
   PORTFOLIO_LIST: `${BASE_URL}/portfolio`,
@@ -192,9 +190,6 @@ export const ENDPOINTS = {
   // Campaigns
   CAMPAIGN_LIST: `${BASE_URL}/newsletter/campaigns`,
   CAMPAIGN_CREATE: `${BASE_URL}/newsletter/campaigns`,
-  CAMPAIGN_UPDATE: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}`,
-  CAMPAIGN_DELETE: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}`,
-  CAMPAIGN_SEND: (id: string) => `${BASE_URL}/newsletter/campaigns/${id}/send`,
 
   // Assets (Cloudinary via backend)
   UPLOAD_IMAGE: `${BASE_URL}/upload/image`,
@@ -205,22 +200,20 @@ export const ENDPOINTS = {
   UPLOAD_BULK_DELETE: `${BASE_URL}/upload/bulk`,
 
   // Payments (Stripe)
-  PAYMENT_CREATE_CHECKOUT: `${BASE_URL}/payments/create-checkout`,
   PAYMENT_VERIFY: (sessionId: string) => `${BASE_URL}/payments/verify/${sessionId}`,
   PAYMENT_INVOICE: (token: string) => `${BASE_URL}/payments/invoice/${token}`,
   PAYMENT_ADMIN_LIST: `${BASE_URL}/payments/admin/list`,
   PAYMENT_ADMIN_STATS: `${BASE_URL}/payments/admin/stats`,
   PAYMENT_ADMIN_CREATE_INVOICE: `${BASE_URL}/payments/admin/create-invoice`,
-  PAYMENT_ADMIN_CREATE_LINK: `${BASE_URL}/payments/admin/create-payment-link`,
   PAYMENT_ADMIN_REFUND: (id: string) => `${BASE_URL}/payments/admin/refund/${id}`,
 
   // Proposals
   PROPOSAL_ADMIN_AI_DRAFT:   `${BASE_URL}/proposals/admin/ai-draft`,
   PROPOSAL_ADMIN_CREATE:     `${BASE_URL}/proposals`,
   PROPOSAL_ADMIN_BY_TASK: (taskId: string) => `${BASE_URL}/proposals/admin/by-task/${taskId}`,
-  PROPOSAL_BY_TOKEN:      (token: string)  => `${BASE_URL}/proposals/${token}`,
-  PROPOSAL_ACCEPT:        (token: string)  => `${BASE_URL}/proposals/${token}/accept`,
-  PROPOSAL_REQUEST_CHANGES: (token: string) => `${BASE_URL}/proposals/${token}/request-changes`,
+  PROPOSAL_BY_TOKEN:      (token: string)  => `${BASE_URL}/proposals/view/${token}`,
+  PROPOSAL_ACCEPT:        (token: string)  => `${BASE_URL}/proposals/accept/${token}`,
+  PROPOSAL_REQUEST_CHANGES: (token: string) => `${BASE_URL}/proposals/request-changes/${token}`,
 
   // Contracts
   CONTRACT_BY_TOKEN:   (token: string) => `${BASE_URL}/contracts/${token}`,
