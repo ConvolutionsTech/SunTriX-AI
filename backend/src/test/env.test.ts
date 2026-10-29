@@ -27,7 +27,7 @@ describe("validateEnv", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const env = validateEnv(base);
     expect(env.PORT).toBe(4000);
-    expect(env.JWT_EXPIRY).toBe("7d");
+    expect(env.JWT_EXPIRY).toBe("15m");
   });
 
   it("accepts a complete production environment", () => {

@@ -67,8 +67,23 @@ class AuthManager {
 
   constructor() {
     migrateLegacySession();
+    this.state = this.loadState();
+
+    // Refresh tokens rotate on every use: when another tab refreshes or logs
+    // out, adopt its tokens so this tab never presents a stale one
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", (event) => {
+        if (event.key === null || [TOKEN_KEY, REFRESH_KEY, USER_KEY].includes(event.key)) {
+          this.state = this.loadState();
+          this.notify();
+        }
+      });
+    }
+  }
+
+  private loadState(): AuthState {
     const token = read(TOKEN_KEY);
-    this.state = {
+    return {
       token,
       refreshToken: read(REFRESH_KEY),
       user: parseUser(read(USER_KEY)),

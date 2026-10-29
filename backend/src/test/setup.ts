@@ -12,6 +12,7 @@ process.env.TRUST_PROXY ||= "1";
 
 // Deterministic signing key so tests that mint JWTs agree with requireAuth
 process.env.JWT_SECRET ||= "test_jwt_secret_min_64_chars_long_key_string_for_testing_1234567890";
+process.env.JWT_REFRESH_SECRET ||= "test_jwt_refresh_secret_different_from_access_0123456789abcdef";
 
 const TEST_DB_DEFAULT = "mongodb://127.0.0.1:27017/suntrix_test";
 const uri = process.env.MONGODB_URI;

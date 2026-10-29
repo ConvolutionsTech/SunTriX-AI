@@ -23,7 +23,7 @@ export const EnvSchema = z
     MONGODB_URI: nonEmpty("MONGODB_URI").regex(/^mongodb(\+srv)?:\/\//, "MONGODB_URI must be a mongodb:// or mongodb+srv:// URI"),
     JWT_SECRET: nonEmpty("JWT_SECRET").min(32, "JWT_SECRET must be at least 32 characters"),
     JWT_REFRESH_SECRET: nonEmpty("JWT_REFRESH_SECRET").min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
-    JWT_EXPIRY: z.string().regex(/^\d+[smhdw]$/, "JWT_EXPIRY must look like 15m, 12h or 7d").default("7d"),
+    JWT_EXPIRY: z.string().regex(/^\d+[smhdw]$/, "JWT_EXPIRY must look like 15m, 12h or 7d").default("15m"),
     FRONTEND_URL: nonEmpty("FRONTEND_URL").url("FRONTEND_URL must be a URL"),
     STRIPE_SECRET_KEY: z.string().regex(/^(sk|rk)_(live|test)_/, "STRIPE_SECRET_KEY must start with sk_live_/sk_test_").optional(),
     STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_/, "STRIPE_WEBHOOK_SECRET must start with whsec_").optional(),

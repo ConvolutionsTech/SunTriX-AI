@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
 import request from "supertest";
-import jwt from "jsonwebtoken";
 import Stripe from "stripe";
 import app from "../app";
 import SystemSetting from "../models/SystemSetting";
 import { getSetting, updateSettingCache, isEnvOnlySetting } from "../lib/configLoader";
+import { connectTestDb, disconnectTestDb } from "./helpers/db";
+import { staffToken } from "./helpers/auth";
 
 const ORIGINAL_ENV = { ...process.env };
 const JWT_TEST_SECRET = "test_jwt_secret_for_env_only_suite_0123456789abcdef";
@@ -22,9 +23,8 @@ function postWebhook(signedWith: string) {
     .send(payload);
 }
 
-function adminToken() {
-  return jwt.sign({ id: "admin_1", email: "admin@suntrix.com", role: "admin", name: "Admin" }, JWT_TEST_SECRET);
-}
+let token = "";
+const adminToken = () => token;
 
 beforeEach(() => {
   process.env.JWT_SECRET = JWT_TEST_SECRET;
@@ -32,7 +32,14 @@ beforeEach(() => {
   delete process.env.STRIPE_WEBHOOK_SECRET;
 });
 
-afterAll(() => {
+beforeAll(async () => {
+  process.env.JWT_SECRET = JWT_TEST_SECRET;
+  await connectTestDb();
+  token = await staffToken("admin");
+}, 120000);
+
+afterAll(async () => {
+  await disconnectTestDb();
   process.env = ORIGINAL_ENV;
   vi.restoreAllMocks();
 });

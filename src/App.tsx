@@ -42,6 +42,9 @@ import AdminClients from "./pages/admin/AdminClients";
 import AdminPricing from "./pages/admin/AdminPricing";
 import AdminBlog from "./pages/admin/AdminBlog";
 import AdminPayments from "./pages/admin/AdminPayments";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminAccount from "./pages/admin/AdminAccount";
+import AdminPasswordReset from "./pages/admin/AdminPasswordReset";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 import ClientInvoice from "./pages/ClientInvoice";
@@ -95,6 +98,8 @@ const AppRoutes = () => {
 
         {/* Admin Routes */}
         <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/forgot-password" element={<AdminPasswordReset />} />
+        <Route path="/admin/reset-password/:token" element={<AdminPasswordReset />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
           <Route path="tasks" element={<AdminTasks />} />
@@ -111,6 +116,8 @@ const AppRoutes = () => {
           <Route path="payments" element={<AdminPayments />} />
           <Route path="audit" element={<AdminAuditLog />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="account" element={<AdminAccount />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

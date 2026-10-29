@@ -115,6 +115,34 @@ export const RefreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
 });
 
+const newPassword = z.string().min(12, "Password must be at least 12 characters").max(128, "Password too long");
+
+// POST /auth/password — signed-in admin changes their own password
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(200),
+  newPassword,
+});
+
+// POST /auth/forgot
+export const ForgotPasswordSchema = z.object({ email });
+
+// POST /auth/reset/:token
+export const ResetPasswordSchema = z.object({ password: newPassword });
+
+// POST /admin/users — create admin user
+export const AdminUserCreateSchema = z.object({
+  email,
+  name,
+  role: z.enum(["admin", "viewer"]),
+  password: newPassword,
+});
+
+// PATCH /admin/users/:id
+export const AdminUserUpdateSchema = z.object({
+  name: name.optional(),
+  role: z.enum(["admin", "viewer"]).optional(),
+});
+
 // POST /proposals/admin/ai-draft
 export const ProposalGenerateSchema = z.object({
   taskRequestId: z.string().min(1, "taskRequestId is required"),

@@ -24,6 +24,7 @@ import cmsRoutes from "./routes/cms.routes";
 import departmentRoutes from "./routes/department.routes";
 import uploadRoutes from "./routes/upload.routes";
 import adminRoutes from "./routes/admin.routes";
+import adminUserRoutes from "./routes/adminUsers.routes";
 import teamRoutes from "./routes/team.routes";
 import clientRoutes from "./routes/client.routes";
 import pricingRoutes from "./routes/pricing.routes";
@@ -80,10 +81,14 @@ const authLimiter = rateLimit({
   max: 5, // 5 login attempts per 15 min per IP
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Please try again in 15 minutes." },
+  message: { error: "Too many attempts. Please try again in 15 minutes." },
   // Express routing is case-insensitive and ignores a trailing slash, so normalise
   // the same way — otherwise /login/ or /LOGIN would bypass the limit
-  skip: (req) => req.method !== "POST" || req.path.toLowerCase().replace(/\/+$/, "") !== "/login",
+  skip: (req) => {
+    if (req.method !== "POST") return true;
+    const path = req.path.toLowerCase().replace(/\/+$/, "");
+    return !(path === "/login" || path === "/forgot" || path.startsWith("/reset/"));
+  },
 });
 
 const formLimiter = rateLimit({
@@ -184,6 +189,7 @@ app.use(`${V1}/chat`, chatLimiter, chatRoutes);
 app.use(`${V1}/cms`, cmsRoutes);
 app.use(`${V1}/departments`, departmentRoutes);
 app.use(`${V1}/upload`, uploadRoutes);
+app.use(`${V1}/admin/users`, adminUserRoutes);
 app.use(`${V1}/admin`, adminRoutes);
 app.use(`${V1}/team`, teamRoutes);
 app.use(`${V1}/clients`, clientRoutes);

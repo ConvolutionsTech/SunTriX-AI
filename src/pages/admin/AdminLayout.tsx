@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ClipboardList, MessageSquare, Settings,
   LogOut, Menu, X, ChevronRight, ChevronDown, Layers, Image, Users,
   Shield, CreditCard, Search, Moon, Sun, Briefcase, FileText,
-  Building2, DollarSign, UserCheck, Sparkles
+  Building2, DollarSign, UserCheck, Sparkles, KeyRound
 } from "lucide-react";
 import { useNotifications } from "../../hooks/useNotifications";
 import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
@@ -81,6 +81,8 @@ const AdminLayout = () => {
       items: [
         { icon: Settings, label: "Settings & AI Config", href: "/admin/settings" },
         { icon: Shield, label: "Audit Log", href: "/admin/audit" },
+        { icon: UserCheck, label: "Users & Access", href: "/admin/users" },
+        { icon: KeyRound, label: "My Account", href: "/admin/account" },
       ],
     },
   ];

@@ -927,3 +927,26 @@ export async function sendNewsletterWelcomeEmail(data: {
     console.error("Failed to send newsletter welcome email:", err.message || err);
   }
 }
+
+// ─── Admin password reset ──────────────────────────────────────────────────
+export async function sendPasswordResetEmail(data: { email: string; name: string; resetUrl: string }): Promise<void> {
+  const e = escapeFields(data); // HTML-safe copy for the email body (subjects use raw data)
+  try {
+    const { error } = await getResend().emails.send({
+      from: getFromAddress(),
+      to: [data.email],
+      subject: `Reset your ${getBrandName()} admin password`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto;">
+          <p>Hi ${e.name},</p>
+          <p>Someone asked to reset the password for your admin account. If it was you, use the link below within 30 minutes:</p>
+          <p><a href="${e.resetUrl}" style="display:inline-block;background:#f97316;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">Reset password</a></p>
+          <p style="color:#6b7280;font-size:13px;">If you didn't ask for this, you can ignore this email — your password stays the same.</p>
+        </div>
+      `,
+    });
+    if (error) console.error("Resend Password Reset Error:", error.message);
+  } catch (err: any) {
+    console.error("Failed to send password reset email:", err.message || err);
+  }
+}

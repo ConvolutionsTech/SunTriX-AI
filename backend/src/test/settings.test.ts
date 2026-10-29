@@ -1,18 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import request from "supertest";
-import jwt from "jsonwebtoken";
 import app from "../app";
 import SystemSetting from "../models/SystemSetting";
 import AuditLog from "../models/AuditLog";
 import { SETTINGS_REGISTRY, SETTINGS_BY_KEY } from "../config/settings.registry";
 import { getSetting, updateSettingCache, isEnvOnlySetting, loadSettingsFromDB } from "../lib/configLoader";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/db";
+import { staffToken } from "./helpers/auth";
 
-const token = (role: string) =>
-  jwt.sign({ id: "507f1f77bcf86cd799439011", email: `${role}@suntrix.test`, role, name: role }, process.env.JWT_SECRET!);
-const asAdmin = (req: request.Test) => req.set("Authorization", `Bearer ${token("admin")}`);
+let adminToken = "";
+const asAdmin = (req: request.Test) => req.set("Authorization", `Bearer ${adminToken}`);
 
 describe("settings registry coverage", () => {
   it("every getSetting key in the code is either a runtime setting or env-only", () => {
@@ -58,6 +57,10 @@ describe("settings API", () => {
     await connectTestDb();
   }, 120000);
 
+  beforeEach(async () => {
+    adminToken = await staffToken("admin");
+  });
+
   afterEach(async () => {
     vi.restoreAllMocks();
     await clearTestDb();
@@ -77,7 +80,7 @@ describe("settings API", () => {
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.grouped).sort()).toEqual(["ai", "brand", "chatbot", "email", "newsletter", "security", "storage"]);
 
-    const viewer = await request(app).get("/v1/settings").set("Authorization", `Bearer ${token("viewer")}`);
+    const viewer = await request(app).get("/v1/settings").set("Authorization", `Bearer ${await staffToken("viewer")}`);
     expect(viewer.status).toBe(403);
   });
 

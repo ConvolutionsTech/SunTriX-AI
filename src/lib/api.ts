@@ -80,6 +80,9 @@ export const ENDPOINTS = {
   AUTH_LOGOUT: `${BASE_URL}/auth/logout`,
   AUTH_ME: `${BASE_URL}/auth/me`,
   AUTH_REFRESH: `${BASE_URL}/auth/refresh`,
+  AUTH_PASSWORD: `${BASE_URL}/auth/password`,
+  AUTH_FORGOT: `${BASE_URL}/auth/forgot`,
+  AUTH_RESET: (token: string) => `${BASE_URL}/auth/reset/${token}`,
 
   // Contact & Requests
   CONTACT_SUBMIT: `${BASE_URL}/contact`,
@@ -146,6 +149,7 @@ export const ENDPOINTS = {
   ADMIN_TASKS: `${BASE_URL}/task-requests`,
   ADMIN_CONTACTS: `${BASE_URL}/contact`,
   ADMIN_USERS: `${BASE_URL}/admin/users`,
+  ADMIN_USER: (id: string) => `${BASE_URL}/admin/users/${id}`,
 
   // Team
   TEAM_LIST: `${BASE_URL}/team`,
