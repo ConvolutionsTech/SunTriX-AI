@@ -15,7 +15,7 @@ Frontend (run from repo root):
 ```bash
 npm run dev            # Vite dev server on port 8080 (backend CORS only allows FRONTEND_URL + :5173/:3000 — set FRONTEND_URL accordingly)
 npm run build          # production build
-npm run lint           # eslint
+npm run lint           # eslint, 0 errors + capped warnings (--max-warnings); lower the cap when you remove `any`s
 npm run typecheck      # tsc for the app + strict check of src/lib (vite build does NOT type-check)
 npm test               # vitest run (jsdom, src/**/*.test.ts(x))
 npx vitest run src/test/example.test.ts   # single test file

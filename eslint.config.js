@@ -5,7 +5,8 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // backend/ is a separate package (Node, CommonJS) and is type-checked strictly on its own
+  { ignores: ["dist", "backend/**"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -21,6 +22,15 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // Existing `any`s are tracked as warnings; CI caps the warning count so it can only go down
+      "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+  {
+    // Generated shadcn/ui primitives
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": "off",
     },
   },
 );

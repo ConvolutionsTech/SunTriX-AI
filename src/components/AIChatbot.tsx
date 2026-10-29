@@ -30,14 +30,18 @@ const saveChatMessage = (role: "user" | "assistant", content: string): ChatMessa
   current.push(msg);
   try {
     localStorage.setItem("suntrix_chat", JSON.stringify(current));
-  } catch (_) {}
+  } catch {
+    // Storage unavailable (private mode, quota) — chat history is best-effort
+  }
   return msg;
 };
 
 const clearChatHistory = () => {
   try {
     localStorage.removeItem("suntrix_chat");
-  } catch (_) {}
+  } catch {
+    // Storage unavailable — nothing to clear
+  }
 };
 
 interface PublicSettings {
