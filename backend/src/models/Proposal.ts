@@ -108,5 +108,6 @@ const ProposalSchema = new Schema<IProposal>(
 
 ProposalSchema.index({ taskRequestId: 1 });
 ProposalSchema.index({ clientEmail: 1 });
+ProposalSchema.index({ status: 1, expiresAt: 1 }); // expiry job
 
 export default mongoose.model<IProposal>("Proposal", ProposalSchema);

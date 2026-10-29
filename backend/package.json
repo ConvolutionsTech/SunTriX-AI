@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed:admin": "ts-node src/scripts/seedAdmin.ts",
-    "seed:admin:prod": "node dist/scripts/seedAdmin.js"
+    "seed:admin:prod": "node dist/scripts/seedAdmin.js",
+    "db:sync-indexes": "ts-node src/scripts/syncIndexes.ts",
+    "db:sync-indexes:prod": "node dist/scripts/syncIndexes.js"
   },
   "dependencies": {
     "@stripe/stripe-js": "^9.5.0",

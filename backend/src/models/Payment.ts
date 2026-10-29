@@ -71,4 +71,6 @@ PaymentSchema.index({ clientEmail: 1 });
 PaymentSchema.index({ status: 1, createdAt: -1 });
 PaymentSchema.index({ taskRequestId: 1 });
 
+PaymentSchema.index({ stripePaymentIntentId: 1 }, { sparse: true });
+
 export default mongoose.model<IPayment>("Payment", PaymentSchema);

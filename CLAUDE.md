@@ -29,6 +29,7 @@ npm run typecheck      # tsc --noEmit (strict, noUnusedLocals/Parameters)
 npm test               # vitest run
 npx vitest run src/test/money.test.ts     # single test file
 npx vitest run -t "test name pattern"
+npm run db:sync-indexes # make Mongo indexes match the schemas (idempotent; run on deploy: db:sync-indexes:prod)
 ```
 
 Notes:

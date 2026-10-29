@@ -1,0 +1,23 @@
+/** Importing this module registers every Mongoose model (used by scripts). */
+import "./Admin";
+import "./AuditLog";
+import "./Campaign";
+import "./CaseStudy";
+import "./Client";
+import "./CmsContent";
+import "./ContactMessage";
+import "./Contract";
+import "./Department";
+import "./MediaAsset";
+import "./Newsletter";
+import "./Payment";
+import "./Portfolio";
+import "./Post";
+import "./Pricing";
+import "./ProjectTracker";
+import "./Proposal";
+import "./SystemSetting";
+import "./TaskRequest";
+import "./Team";
+import "./Testimonial";
+import "./TrackerMessage";

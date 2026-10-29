@@ -34,4 +34,6 @@ AuditLogSchema.index({ entity: 1, createdAt: -1 });
 AuditLogSchema.index({ adminId: 1 });
 AuditLogSchema.index({ action: 1 });
 
+AuditLogSchema.index({ createdAt: 1 }); // retention cleanup (lib/scheduler.ts)
+
 export default mongoose.model<IAuditLog>("AuditLog", AuditLogSchema);

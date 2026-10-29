@@ -62,4 +62,6 @@ ContractSchema.index({ taskRequestId: 1 });
 ContractSchema.index({ proposalId: 1 }, { unique: true });
 ContractSchema.index({ clientEmail: 1 });
 
+ContractSchema.index({ status: 1, expiresAt: 1 }); // expiry job
+
 export default mongoose.model<IContract>("Contract", ContractSchema);

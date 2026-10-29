@@ -37,4 +37,6 @@ const MediaAssetSchema = new Schema<IMediaAsset>(
   { timestamps: true }
 );
 
+MediaAssetSchema.index({ createdAt: -1 });
+
 export default mongoose.model<IMediaAsset>("MediaAsset", MediaAssetSchema);

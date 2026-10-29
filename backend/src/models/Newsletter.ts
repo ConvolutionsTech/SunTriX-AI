@@ -30,4 +30,8 @@ const NewsletterSchema = new Schema<INewsletter>(
   { timestamps: true }
 );
 
+NewsletterSchema.index({ subscribed: 1, createdAt: -1 });
+// Unconfirmed sign-ups disappear once their confirmation link expires (confirmed subscribers are never touched)
+NewsletterSchema.index({ confirmTokenExpiry: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { subscribed: false, confirmTokenExpiry: { $type: "date" } } });
+
 export default mongoose.model<INewsletter>("Newsletter", NewsletterSchema);

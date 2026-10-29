@@ -44,4 +44,6 @@ const CaseStudySchema = new Schema<ICaseStudy>(
 
 CaseStudySchema.index({ projectId: 1 });
 
+CaseStudySchema.index({ status: 1, createdAt: -1 });
+
 export default mongoose.model<ICaseStudy>("CaseStudy", CaseStudySchema);
