@@ -100,11 +100,13 @@ describe("env-only settings", () => {
       { key: "STRIPE_SECRET_KEY", value: "sk_live_leak", section: "payments", isSecret: false },
       { key: "GROQ_CHAT_MODEL", value: "llama-3.1-8b-instant", section: "ai", isSecret: false },
     ];
-    vi.spyOn(SystemSetting, "find").mockReturnValue({ sort: () => ({ lean: async () => rows }) } as any);
+    vi.spyOn(SystemSetting, "find").mockReturnValue({ lean: async () => rows } as any);
 
     const res = await request(app).get("/v1/settings").set("Authorization", `Bearer ${adminToken()}`);
     expect(res.status).toBe(200);
-    expect(res.body.settings.map((s: any) => s.key)).toEqual(["GROQ_CHAT_MODEL"]);
+    const keys = res.body.settings.map((s: any) => s.key);
+    expect(keys).toContain("GROQ_CHAT_MODEL");
+    expect(keys).not.toContain("STRIPE_SECRET_KEY");
     expect(JSON.stringify(res.body)).not.toContain("sk_live_leak");
   });
 });

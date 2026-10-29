@@ -5,7 +5,7 @@ import { sendChat } from "../services/groq";
 
 describe("Phase 5.11 AI Workflow Runtime Model Selection Verification", () => {
   it("should verify Chat workflow uses exact configured GROQ_CHAT_MODEL without silent replacement", async () => {
-    updateSettingCache("GROQ_API_KEY", "gsk_mock_test_key_12345");
+    process.env.GROQ_API_KEY = "gsk_mock_test_key_12345";
     updateSettingCache("GROQ_CHAT_MODEL", "qwen-2.5-coder-32b");
 
     const spy = vi.spyOn(groqAdapter, "generateChatCompletion").mockImplementation(async (params) => {

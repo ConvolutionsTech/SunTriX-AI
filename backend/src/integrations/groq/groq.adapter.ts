@@ -95,6 +95,8 @@ export class GroqAdapter {
    */
   async validateModelAvailability(modelId: string): Promise<{
     isValid: boolean;
+    /** True when Groq could not be reached, so the model could not be checked either way */
+    unverifiable?: boolean;
     discoveredModel?: DiscoveredModel;
     message?: string;
   }> {
@@ -110,7 +112,7 @@ export class GroqAdapter {
 
     if (available.length === 0) {
       // Offline fallback for testing environment without active Groq API Key
-      return { isValid: false, message: `Model '${modelId}' could not be verified because Groq API key is unconfigured or offline.` };
+      return { isValid: false, unverifiable: true, message: `Model '${modelId}' could not be verified because Groq API key is unconfigured or offline.` };
     }
 
     return {

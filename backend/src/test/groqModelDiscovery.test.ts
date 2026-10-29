@@ -4,7 +4,7 @@ import { updateSettingCache, getSetting } from "../lib/configLoader";
 
 describe("Dynamic Groq Model Discovery & Selection Test Suite", () => {
   beforeAll(() => {
-    updateSettingCache("GROQ_API_KEY", "gsk_mock_test_key_12345");
+    process.env.GROQ_API_KEY = "gsk_mock_test_key_12345";
   });
 
   it("should dynamically list models from Groq API and infer capabilities", async () => {
