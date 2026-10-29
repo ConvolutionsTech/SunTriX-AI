@@ -149,23 +149,20 @@ npm run dev
 
 ### 2.4 First Admin Account Setup
 
-The platform has no built-in default admin account (seed file removed). To create your first admin:
+The platform has no built-in default admin account. Create the first admin with the idempotent seed script. It does nothing if an admin with that email already exists, so it is safe to run on every deploy.
 
 ```bash
-# In the backend directory, run directly via ts-node:
-npx ts-node -e "
-import 'dotenv/config';
-import { connectDB } from './src/config/db';
-import Admin from './src/models/Admin';
-connectDB().then(async () => {
-  await Admin.create({ email: 'admin@suntrix.com', password: 'your_secure_password', name: 'Admin', role: 'admin' });
-  console.log('Admin created');
-  process.exit(0);
-});
-"
+# In backend/, with MONGODB_URI set:
+ADMIN_SEED_EMAIL=you@yourdomain.com \
+ADMIN_SEED_PASSWORD='at-least-12-characters' \
+ADMIN_SEED_NAME='Your Name' \
+npm run seed:admin            # dev (ts-node)
+
+# In a built image / production:
+npm run seed:admin:prod       # node dist/scripts/seedAdmin.js
 ```
 
-Or use MongoDB Compass to insert directly into the `admins` collection.
+The password must be at least 12 characters, and known weak values such as `admin123` are rejected. Remove the `ADMIN_SEED_*` variables from the environment once the admin exists.
 
 ### 2.5 Environment Variables Reference
 

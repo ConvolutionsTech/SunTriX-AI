@@ -7,9 +7,10 @@
     "dev": "nodemon --exec ts-node src/app.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/app.js",
-    "seed": "ts-node src/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:admin": "ts-node src/scripts/seedAdmin.ts",
+    "seed:admin:prod": "node dist/scripts/seedAdmin.js"
   },
   "dependencies": {
     "@stripe/stripe-js": "^9.5.0",
