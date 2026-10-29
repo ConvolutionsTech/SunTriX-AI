@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction, Request } from "express";
 import SystemSetting from "../models/SystemSetting";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, requireAdmin, AuthRequest } from "../middleware/auth";
 import { updateSettingCache, getSetting, isEnvOnlySetting } from "../lib/configLoader";
 import AuditLog from "../models/AuditLog";
 import { groqAdapter } from "../integrations/groq/groq.adapter";
@@ -51,7 +51,8 @@ router.get("/ai/models", requireAuth, async (req: AuthRequest, res: Response, ne
 });
 
 // ─── GET /v1/settings — all settings grouped by section (secrets masked) ──
-router.get("/", requireAuth, async (_req: AuthRequest, res: Response, next: NextFunction) => {
+// Admin only — viewers have no access to configuration
+router.get("/", requireAuth, requireAdmin, async (_req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const settings = await SystemSetting.find({}).sort({ section: 1, key: 1 }).lean();
 

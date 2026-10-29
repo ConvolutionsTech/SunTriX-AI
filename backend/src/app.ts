@@ -86,7 +86,9 @@ const formLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_CONTACT", "5")),
   message: { error: "Too many submissions. Please try again in an hour." },
-  skip: (req) => req.method !== "POST",
+  // Public form submissions only (POST / on each router) — admin actions on the
+  // same routers (replies, campaigns) must not share the 5-per-hour budget
+  skip: (req) => req.method !== "POST" || req.path !== "/",
 });
 
 const chatLimiter = rateLimit({
