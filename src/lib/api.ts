@@ -238,6 +238,7 @@ export const ENDPOINTS = {
   TRACKER_ADMIN_CHAT:               (id: string) => `${BASE_URL}/tracker/admin/${id}/chat`,
   TRACKER_ADMIN_FILE_UPLOAD:        (id: string) => `${BASE_URL}/tracker/admin/${id}/file/upload`,
   TRACKER_ADMIN_MILESTONE_PAYABLE:  (id: string, mId: string) => `${BASE_URL}/tracker/admin/${id}/milestone/${mId}/mark-payable`,
+  TRACKER_ADMIN_MILESTONE_PAID_MANUALLY: (id: string, mId: string) => `${BASE_URL}/tracker/admin/${id}/milestone/${mId}/mark-paid-manually`,
   TRACKER_CLIENT_BY_TOKEN:          (token: string) => `${BASE_URL}/tracker/client/${token}`,
   TRACKER_CLIENT_DELIVERABLE_APPROVE: (token: string, dId: string) => `${BASE_URL}/tracker/client/${token}/deliverable/${dId}/approve`,
   TRACKER_CLIENT_DELIVERABLE_REJECT:  (token: string, dId: string) => `${BASE_URL}/tracker/client/${token}/deliverable/${dId}/reject`,

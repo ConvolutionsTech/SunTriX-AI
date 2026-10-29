@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ENDPOINTS, apiRequest } from "@/lib/api";
 import { AdminStatusBadge } from "./AdminStatusBadge";
 import { ProposalEditor } from "./ProposalEditor";
+import AdminProjectHub from "./AdminProjectHub";
 import {
   User, Mail, Phone, Building, Briefcase, Calendar, DollarSign,
   FileText, Lock, CreditCard, Sparkles, CheckCircle2, Clock,
@@ -353,13 +354,11 @@ export const EngagementCommandCenter = ({
                 <p className="text-xs text-muted-foreground">Development phases, deliverables, and client updates</p>
               </div>
 
-              {trackerData ? (
-                <div className="space-y-3 text-xs">
-                  <p className="font-semibold text-foreground">Current Phase: {trackerData.currentPhase}</p>
-                </div>
+              {["contract_signed", "in_progress", "completed"].includes(request.status) || trackerData ? (
+                <AdminProjectHub taskId={request._id} />
               ) : (
                 <div className="py-8 text-center space-y-2">
-                  <p className="text-xs text-muted-foreground">Project tracker activates upon signed contract.</p>
+                  <p className="text-xs text-muted-foreground">Project tracker activates once the contract is signed.</p>
                 </div>
               )}
             </div>

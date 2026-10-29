@@ -91,8 +91,9 @@ export const ChatMessageSchema = z.object({
 
 // POST /tracker/client/:token/update
 export const TrackerUpdateSchema = z.object({
-  title:   shortStr("Title"),
-  content: longStr("Content", 3000),
+  type: z.enum(["ProgressUpdate", "Blocker", "MilestoneReached", "ActionRequired"]),
+  body: longStr("Update", 3000),
+  nextUpdateDue: z.coerce.date().optional(),
 });
 
 // ─── ADMIN SCHEMAS ─────────────────────────────────────────────────────────

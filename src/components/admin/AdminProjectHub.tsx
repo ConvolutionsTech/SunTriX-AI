@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS, apiUpload } from "../lib/api";
-import { toast } from "react-hot-toast";
+import { apiRequest, ENDPOINTS, apiUpload } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { safeHref } from "@/lib/sanitize";
 import {
   CheckCircle2, Clock, Send, Upload, FileText,
@@ -81,7 +81,10 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
 
   useEffect(() => {
     fetchTracker();
-    const interval = setInterval(() => fetchTracker(true), 8000);
+    // Poll for client activity, but not while the browser tab is hidden
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchTracker(true);
+    }, 8000);
     return () => clearInterval(interval);
   }, [taskId]);
 
@@ -101,16 +104,16 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_PHASE_ADVANCE(tracker._id), {
       method: "POST", body: { nextPhase },
     });
-    if (error) toast.error("Failed to advance phase.");
-    else { toast.success(`Phase advanced to ${nextPhase}!`); fetchTracker(true); }
+    if (error) notify.error("Failed to advance phase.");
+    else { notify.success(`Phase advanced to ${nextPhase}!`); fetchTracker(true); }
   };
 
   const handleCompleteDeliverable = async (dId: string) => {
     setCompletingDeliverable(dId);
     const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_DELIVERABLE_DONE(tracker._id, dId), { method: "POST" });
     setCompletingDeliverable(null);
-    if (error) toast.error("Failed.");
-    else { toast.success("Client notified to review!"); fetchTracker(true); }
+    if (error) notify.error("Failed.");
+    else { notify.success("Client notified to review!"); fetchTracker(true); }
   };
 
   const handlePostUpdate = async (e: React.FormEvent) => {
@@ -121,8 +124,8 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
       method: "POST", body: newUpdate,
     });
     setSubmitting(false);
-    if (error) toast.error("Failed to post update.");
-    else { toast.success("Update posted & client notified!"); setNewUpdate({ type: "ProgressUpdate", body: "", nextUpdateDue: "" }); fetchTracker(true); }
+    if (error) notify.error("Failed to post update.");
+    else { notify.success("Update posted & client notified!"); setNewUpdate({ type: "ProgressUpdate", body: "", nextUpdateDue: "" }); fetchTracker(true); }
   };
 
   const handleSendChat = async (e: React.FormEvent) => {
@@ -135,7 +138,7 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
       messages: [...(prev.messages || []), { sender: "Admin", text: msg, sentAt: new Date().toISOString() }]
     } : prev);
     const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_CHAT(tracker._id), { method: "POST", body: { text: msg } });
-    if (error) { toast.error("Failed to send message."); fetchTracker(true); }
+    if (error) { notify.error("Failed to send message."); fetchTracker(true); }
   };
 
   const handleFileUpload = async (file: File) => {
@@ -146,10 +149,10 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     try {
       const { error } = await apiUpload(ENDPOINTS.TRACKER_ADMIN_FILE_UPLOAD(tracker._id), formData);
       if (error) throw new Error(error);
-      toast.success("File uploaded & client notified!");
+      notify.success("File uploaded & client notified!");
       fetchTracker(true);
     } catch (err) {
-      toast.error(`Upload failed: ${err instanceof Error ? err.message : "please try again"}`);
+      notify.error(`Upload failed: ${err instanceof Error ? err.message : "please try again"}`);
     } finally {
       setUploadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -161,8 +164,19 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     setMarkingPayable(mId);
     const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_MILESTONE_PAYABLE(tracker._id, mId), { method: "POST" });
     setMarkingPayable(null);
-    if (error) return toast.error("Failed to mark payable.");
-    toast.success("Payment request sent to client!");
+    if (error) return notify.error("Failed to mark payable.");
+    notify.success("Payment request sent to client!");
+    fetchTracker(true);
+  };
+
+  const handleMarkPaidManually = async (mId: string, title: string) => {
+    const note = window.prompt(`Record an off-platform payment for "${title}"? Add a reference (bank transfer, cheque…):`);
+    if (note === null) return;
+    setMarkingPayable(mId);
+    const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_MILESTONE_PAID_MANUALLY(tracker._id, mId), { method: "POST", body: { note } });
+    setMarkingPayable(null);
+    if (error) return notify.error(error);
+    notify.success("Milestone recorded as paid.");
     fetchTracker(true);
   };
 
@@ -171,8 +185,8 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     setRequestingCompletion(true);
     const { error } = await apiRequest(ENDPOINTS.TRACKER_ADMIN_COMPLETION_REQUEST(tracker._id), { method: "POST" });
     setRequestingCompletion(false);
-    if (error) return toast.error("Failed to send sign-off request.");
-    toast.success("Sign-off request sent to client!");
+    if (error) return notify.error("Failed to send sign-off request.");
+    notify.success("Sign-off request sent to client!");
     fetchTracker(true);
   };
 
@@ -508,6 +522,13 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
                             <div className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1">
                               <Clock className="h-3 w-3" /> Awaiting Payment
                             </div>
+                            <button
+                              onClick={() => handleMarkPaidManually(m._id, m.title)}
+                              disabled={markingPayable === m._id}
+                              className="text-[11px] text-muted-foreground hover:text-foreground underline disabled:opacity-60"
+                            >
+                              Paid outside Stripe?
+                            </button>
                           </div>
                         ) : (
                           <motion.button

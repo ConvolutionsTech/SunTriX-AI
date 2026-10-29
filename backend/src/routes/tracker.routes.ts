@@ -121,9 +121,7 @@ router.post("/admin/:id/deliverable/:dId/complete", requireAuth, async (req: Req
 
 router.post("/admin/:id/update", requireAuth, validate(TrackerUpdateSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { title, content, nextUpdateDue } = req.body;
-    const type = title; // Schema validates 'title' representing update type
-    const body = content; // Schema validates 'content'
+    const { type, body, nextUpdateDue } = req.body;
     const tracker = await ProjectTracker.findById(req.params.id);
     if (!tracker) return next(createError("Tracker not found", 404));
 
