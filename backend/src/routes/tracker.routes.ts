@@ -1,5 +1,6 @@
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { toClientTracker } from "../lib/clientDto";
+import rateLimit from "express-rate-limit";
 import { Router, Request, Response, NextFunction } from "express";
 import ProjectTracker from "../models/ProjectTracker";
 import TrackerMessage from "../models/TrackerMessage";
@@ -193,27 +194,55 @@ router.get("/client/:token", async (req: Request, res: Response, next: NextFunct
   } catch (err) { next(err); }
 });
 
+// ─── Client actions on tracker items ───────────────────────────────
+// Each action is an atomic conditional update on one array item, so a
+// repeated or concurrent click can't re-apply it (or email the admin twice).
+const clientActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `tracker:${req.params.token}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many actions on this project link. Please wait a few minutes." },
+});
+router.use("/client/:token", (req, res, next) => (req.method === "POST" ? clientActionLimiter(req, res, next) : next()));
+
+async function claimItem(
+  token: string,
+  field: "deliverables" | "files" | "updates",
+  itemId: string,
+  condition: Record<string, unknown>,
+  set: Record<string, unknown>
+) {
+  const prefixed = (o: Record<string, unknown>, prefix: string) =>
+    Object.fromEntries(Object.entries(o).map(([k, v]) => [`${prefix}${k}`, v]));
+  const tracker = await ProjectTracker.findOneAndUpdate(
+    { trackerToken: token, [field]: { $elemMatch: { _id: itemId, ...condition } } },
+    { $set: prefixed(set, `${field}.$.`) },
+    { new: true }
+  );
+  if (tracker) return { tracker, item: (tracker as any)[field].id(itemId) };
+
+  const existing = await ProjectTracker.findOne({ trackerToken: token }).select(`_id ${field}._id`).lean();
+  if (!existing) throw createError("Invalid token", 404);
+  if (!(existing as any)[field]?.some((i: any) => String(i._id) === itemId)) throw createError("Item not found", 404);
+  throw createError("This item has already been actioned.", 409);
+}
+
 router.post("/client/:token/deliverable/:dId/approve", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
-
-    const deliverable = tracker.deliverables.id(req.params.dId);
-    if (!deliverable) return next(createError("Deliverable not found", 404));
-
-    deliverable.status = "Approved";
-    deliverable.clientApprovedAt = new Date();
-
+    const { tracker, item } = await claimItem(req.params.token, "deliverables", req.params.dId, { status: "InReview" }, {
+      status: "Approved",
+      clientApprovedAt: new Date(),
+    });
     const task = await TaskRequest.findById(tracker.taskRequestId).lean();
-    const clientName = task?.name || "Client";
-
-    await writeAudit(tracker, `Approved deliverable: ${deliverable.title}`, clientName, "Client");
+    await writeAudit(tracker, `Approved deliverable: ${item.title}`, task?.name || "Client", "Client");
     await tracker.save();
 
     await sendTrackerClientActionToAdminEmail({
       actionStr: "approved a deliverable",
       projectTitle: task?.projectTitle || "",
-      targetName: deliverable.title,
+      targetName: item.title,
       adminUrl: getAdminUrl()
     });
 
@@ -223,26 +252,19 @@ router.post("/client/:token/deliverable/:dId/approve", async (req: Request, res:
 
 router.post("/client/:token/deliverable/:dId/reject", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { clientRejectionNote } = req.body;
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
-
-    const deliverable = tracker.deliverables.id(req.params.dId);
-    if (!deliverable) return next(createError("Deliverable not found", 404));
-
-    deliverable.status = "Rejected";
-    deliverable.clientRejectionNote = clientRejectionNote;
-
+    const note = String(req.body.clientRejectionNote ?? "").slice(0, 2000);
+    const { tracker, item } = await claimItem(req.params.token, "deliverables", req.params.dId, { status: "InReview" }, {
+      status: "Rejected",
+      clientRejectionNote: note,
+    });
     const task = await TaskRequest.findById(tracker.taskRequestId).lean();
-    const clientName = task?.name || "Client";
-
-    await writeAudit(tracker, `Requested changes on deliverable: ${deliverable.title}`, clientName, "Client");
+    await writeAudit(tracker, `Requested changes on deliverable: ${item.title}`, task?.name || "Client", "Client");
     await tracker.save();
 
     await sendTrackerClientActionToAdminEmail({
       actionStr: "requested changes on a deliverable",
       projectTitle: task?.projectTitle || "",
-      targetName: deliverable.title,
+      targetName: item.title,
       adminUrl: getAdminUrl()
     });
 
@@ -252,21 +274,20 @@ router.post("/client/:token/deliverable/:dId/reject", async (req: Request, res: 
 
 router.post("/client/:token/update/:uId/acknowledge", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
+    let result;
+    try {
+      result = await claimItem(req.params.token, "updates", req.params.uId, { clientAcknowledgedAt: null }, { clientAcknowledgedAt: new Date() });
+    } catch (err: any) {
+      // Acknowledging twice is harmless: return the tracker unchanged
+      if (err.statusCode !== 409) throw err;
+      const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
+      return res.json({ message: "Update acknowledged", tracker: toClientTracker(tracker!) });
+    }
+    const task = await TaskRequest.findById(result.tracker.taskRequestId).lean();
+    await writeAudit(result.tracker, `Acknowledged update`, task?.name || "Client", "Client");
+    await result.tracker.save();
 
-    const update = tracker.updates.id(req.params.uId);
-    if (!update) return next(createError("Update not found", 404));
-
-    update.clientAcknowledgedAt = new Date();
-
-    const task = await TaskRequest.findById(tracker.taskRequestId).lean();
-    const clientName = task?.name || "Client";
-
-    await writeAudit(tracker, `Acknowledged update`, clientName, "Client");
-    await tracker.save();
-
-    res.json({ message: "Update acknowledged", tracker: toClientTracker(tracker) });
+    res.json({ message: "Update acknowledged", tracker: toClientTracker(result.tracker) });
   } catch (err) { next(err); }
 });
 
@@ -528,16 +549,14 @@ router.get("/admin/:id/audit", requireAuth, async (req: Request, res: Response, 
 // ─── CLIENT: Approve file ──────────────────────────────────────────
 router.post("/client/:token/file/:fId/approve", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
-    const file = tracker.files.id(req.params.fId);
-    if (!file) return next(createError("File not found", 404));
-    file.approvalStatus = "Approved";
-    file.approvedAt = new Date();
+    const { tracker, item } = await claimItem(req.params.token, "files", req.params.fId, { approvalStatus: "Pending" }, {
+      approvalStatus: "Approved",
+      approvedAt: new Date(),
+    });
     const task = await TaskRequest.findById(tracker.taskRequestId).lean() as any;
-    await writeAudit(tracker, `Approved file: ${file.filename}`, task?.name || "Client", "Client");
+    await writeAudit(tracker, `Approved file: ${item.filename}`, task?.name || "Client", "Client");
     await tracker.save();
-    await sendTrackerClientActionToAdminEmail({ actionStr: "approved a file", projectTitle: task?.projectTitle || "", targetName: file.filename, adminUrl: getAdminUrl() });
+    await sendTrackerClientActionToAdminEmail({ actionStr: "approved a file", projectTitle: task?.projectTitle || "", targetName: item.filename, adminUrl: getAdminUrl() });
     res.json({ message: "File approved", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
@@ -545,17 +564,14 @@ router.post("/client/:token/file/:fId/approve", async (req: Request, res: Respon
 // ─── CLIENT: Reject file ───────────────────────────────────────────
 router.post("/client/:token/file/:fId/reject", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { clientComment } = req.body;
-    const tracker = await ProjectTracker.findOne({ trackerToken: req.params.token });
-    if (!tracker) return next(createError("Invalid token", 404));
-    const file = tracker.files.id(req.params.fId);
-    if (!file) return next(createError("File not found", 404));
-    file.approvalStatus = "Rejected";
-    file.clientComment = clientComment || "";
+    const { tracker, item } = await claimItem(req.params.token, "files", req.params.fId, { approvalStatus: "Pending" }, {
+      approvalStatus: "Rejected",
+      clientComment: String(req.body.clientComment ?? "").slice(0, 2000),
+    });
     const task = await TaskRequest.findById(tracker.taskRequestId).lean() as any;
-    await writeAudit(tracker, `Rejected file: ${file.filename}`, task?.name || "Client", "Client");
+    await writeAudit(tracker, `Rejected file: ${item.filename}`, task?.name || "Client", "Client");
     await tracker.save();
-    await sendTrackerClientActionToAdminEmail({ actionStr: "rejected a file", projectTitle: task?.projectTitle || "", targetName: file.filename, adminUrl: getAdminUrl() });
+    await sendTrackerClientActionToAdminEmail({ actionStr: "rejected a file", projectTitle: task?.projectTitle || "", targetName: item.filename, adminUrl: getAdminUrl() });
     res.json({ message: "File rejected", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
