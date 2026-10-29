@@ -1,4 +1,5 @@
 import { taskRequestService } from "../modules/task-requests/task-request.service";
+import { toClientTracker } from "../lib/clientDto";
 import { Router, Request, Response, NextFunction } from "express";
 import ProjectTracker from "../models/ProjectTracker";
 import TrackerMessage from "../models/TrackerMessage";
@@ -178,8 +179,7 @@ router.get("/client/:token", async (req: Request, res: Response, next: NextFunct
     if (!tracker) return next(createError("Invalid tracking token", 404));
     
     // Sanitize: remove audit log
-    const sanitized: any = { ...tracker };
-    delete sanitized.auditLog;
+    const sanitized: any = toClientTracker(tracker);
     
     // Fetch messages from separate collection and merge with legacy embedded messages
     const newMessages = await TrackerMessage.find({ trackerId: tracker._id }).sort({ sentAt: 1 }).lean();
@@ -217,7 +217,7 @@ router.post("/client/:token/deliverable/:dId/approve", async (req: Request, res:
       adminUrl: getAdminUrl()
     });
 
-    res.json({ message: "Deliverable approved", tracker });
+    res.json({ message: "Deliverable approved", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 
@@ -246,7 +246,7 @@ router.post("/client/:token/deliverable/:dId/reject", async (req: Request, res: 
       adminUrl: getAdminUrl()
     });
 
-    res.json({ message: "Deliverable rejected", tracker });
+    res.json({ message: "Deliverable rejected", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 
@@ -266,7 +266,7 @@ router.post("/client/:token/update/:uId/acknowledge", async (req: Request, res: 
     await writeAudit(tracker, `Acknowledged update`, clientName, "Client");
     await tracker.save();
 
-    res.json({ message: "Update acknowledged", tracker });
+    res.json({ message: "Update acknowledged", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 
@@ -288,7 +288,7 @@ router.post("/client/:token/chat", validate(ChatMessageSchema), async (req: Requ
     // Maybe don't spam audit log with chat messages, just save.
     await tracker.save();
 
-    res.json({ message: "Message sent", tracker });
+    res.json({ message: "Message sent", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 
@@ -538,7 +538,7 @@ router.post("/client/:token/file/:fId/approve", async (req: Request, res: Respon
     await writeAudit(tracker, `Approved file: ${file.filename}`, task?.name || "Client", "Client");
     await tracker.save();
     await sendTrackerClientActionToAdminEmail({ actionStr: "approved a file", projectTitle: task?.projectTitle || "", targetName: file.filename, adminUrl: getAdminUrl() });
-    res.json({ message: "File approved", tracker });
+    res.json({ message: "File approved", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 
@@ -556,7 +556,7 @@ router.post("/client/:token/file/:fId/reject", async (req: Request, res: Respons
     await writeAudit(tracker, `Rejected file: ${file.filename}`, task?.name || "Client", "Client");
     await tracker.save();
     await sendTrackerClientActionToAdminEmail({ actionStr: "rejected a file", projectTitle: task?.projectTitle || "", targetName: file.filename, adminUrl: getAdminUrl() });
-    res.json({ message: "File rejected", tracker });
+    res.json({ message: "File rejected", tracker: toClientTracker(tracker) });
   } catch (err) { next(err); }
 });
 

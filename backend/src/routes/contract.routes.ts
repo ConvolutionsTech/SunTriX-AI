@@ -1,3 +1,4 @@
+import { toClientContract } from "../lib/clientDto";
 import { Router, Request, Response, NextFunction } from "express";
 import { contractService } from "../modules/contracts/contract.service";
 import { validate, ContractSignSchema } from "../middleware/validate";
@@ -18,7 +19,7 @@ router.get("/admin/by-task/:taskId", requireAuth, async (req: Request, res: Resp
 router.get("/:token", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const contract = await contractService.getByToken(req.params.token);
-    res.json(contract);
+    res.json(toClientContract(contract));
   } catch (err) {
     next(err);
   }

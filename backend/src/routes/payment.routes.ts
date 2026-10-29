@@ -5,6 +5,8 @@ import { validate, InvoiceCreateSchema } from "../middleware/validate";
 import { logAudit } from "../lib/audit";
 import { AppError } from "../shared/errors/appError";
 import Payment from "../models/Payment";
+import TaskRequest from "../models/TaskRequest";
+import { toClientInvoice } from "../lib/clientDto";
 
 const router = Router();
 
@@ -12,7 +14,8 @@ const router = Router();
 router.get("/invoice/:token", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payment = await paymentService.getInvoiceByToken(req.params.token);
-    res.json(payment);
+    const task = payment.taskRequestId ? await TaskRequest.findById(payment.taskRequestId).select("projectTitle service").lean() : null;
+    res.json(toClientInvoice(payment, task));
   } catch (err) {
     next(err);
   }
