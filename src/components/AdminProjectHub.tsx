@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "../lib/api";
+import { authManager } from "@/lib/auth";
 import { toast } from "react-hot-toast";
 import {
   CheckCircle2, Clock, Send, Upload, FileText,
@@ -145,7 +146,7 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     try {
       const res = await fetch(ENDPOINTS.TRACKER_ADMIN_FILE_UPLOAD(tracker._id), {
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
+        headers: { Authorization: `Bearer ${authManager.getToken() || ""}` },
         body: formData,
       });
       if (!res.ok) throw new Error("Upload failed");

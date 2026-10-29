@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiRequest, ENDPOINTS } from "../lib/api";
+import { authManager } from "../lib/auth";
 
 export interface NotificationsData {
   newTasks: number;
@@ -17,13 +18,10 @@ export function useNotifications() {
   });
 
   const fetchNotifications = async () => {
-    const token = localStorage.getItem("auth_token");
-    if (!token) return;
+    if (!authManager.isAuthenticated()) return;
 
     try {
-      const { data } = await apiRequest<NotificationsData>(
-        `${(import.meta.env.VITE_API_URL as string) || "http://localhost:4000/v1"}/admin/notifications`
-      );
+      const { data } = await apiRequest<NotificationsData>(ENDPOINTS.ADMIN_NOTIFICATIONS, { auth: true });
       if (data) {
         setNotifications({
           newTasks: data.newTasks || 0,

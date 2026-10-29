@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { authManager } from "@/lib/auth";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import {
@@ -81,7 +82,7 @@ export const AdminMedia = () => {
       setUploadProgress(`Uploading (${i + 1}/${fileArray.length}): ${file.name}`);
       const formData = new FormData();
       formData.append("file", file);
-      const token = localStorage.getItem("auth_token");
+      const token = authManager.getToken();
 
       const isVideo = file.type.startsWith("video/") || [".mp4", ".mov", ".webm", ".avi", ".mkv"].some((ext) => file.name.toLowerCase().endsWith(ext));
       const isDoc = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt"].some((ext) => file.name.toLowerCase().endsWith(ext));

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { authManager } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Eye, EyeOff, Star, StarOff, X, Save, Video, Image, Monitor, Copy } from "lucide-react";
 import LivePreview from "@/components/admin/LivePreview";
@@ -216,7 +217,7 @@ const AdminPortfolio = () => {
         if (files.length === 0) return;
         setUp(true);
         
-        const token = localStorage.getItem("auth_token");
+        const token = authManager.getToken();
         const endpoint = type === "image" ? ENDPOINTS.UPLOAD_IMAGE : ENDPOINTS.UPLOAD_VIDEO;
 
         try {

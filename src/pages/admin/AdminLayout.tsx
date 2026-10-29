@@ -9,6 +9,8 @@ import {
 import { useNotifications } from "../../hooks/useNotifications";
 import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/lib/auth";
+import { logout } from "@/lib/api";
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -29,18 +31,15 @@ const AdminLayout = () => {
   const notifications = useNotifications();
   const { theme, setTheme } = useTheme();
 
-  const token = localStorage.getItem("auth_token");
-  const userRaw = localStorage.getItem("suntrix_admin_session");
-  const user = userRaw ? (JSON.parse(userRaw) as { name: string; email: string }) : null;
+  const { isAuthenticated, user } = useAuth();
 
-  if (!token) {
+  if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
   }
 
+  // Clearing the session re-renders this layout, which redirects to /admin/login
   const handleLogout = () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("suntrix_admin_session");
-    window.location.href = "/admin/login";
+    void logout();
   };
 
   const navGroups: NavGroup[] = [
@@ -193,10 +192,10 @@ const AdminLayout = () => {
           {sidebarOpen && user && (
             <div className="flex items-center gap-2 px-2 py-1">
               <div className="h-7 w-7 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                {user.name[0]}
+                {(user.name || user.email || "?")[0]}
               </div>
               <div className="overflow-hidden">
-                <p className="text-xs font-semibold text-foreground truncate">{user.name}</p>
+                <p className="text-xs font-semibold text-foreground truncate">{user.name || user.email}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
               </div>
             </div>

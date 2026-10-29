@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Lock, Mail } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { authManager, useAuth } from "@/lib/auth";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
@@ -10,7 +11,8 @@ const AdminLogin = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isAuthenticated = !!localStorage.getItem("auth_token");
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   if (isAuthenticated) {
     return <Navigate to="/admin" replace />;
   }
@@ -25,10 +27,8 @@ const AdminLogin = () => {
     );
     setLoading(false);
     if (data?.token && data?.refreshToken) {
-      localStorage.setItem("auth_token", data.token);
-      localStorage.setItem("refresh_token", data.refreshToken);
-      localStorage.setItem("suntrix_admin_session", JSON.stringify(data.user));
-      window.location.href = "/admin";
+      authManager.login(data.token, data.refreshToken, data.user);
+      navigate("/admin", { replace: true });
     } else {
       setError(apiErr || "Invalid email or password");
     }

@@ -60,7 +60,7 @@ Notes:
 - `src/lib/api.ts` is the single source of backend endpoints (`ENDPOINTS`) and the `apiRequest<T>()` helper returning `{ data, error }`. Add new endpoints here.
 - Data fetching uses TanStack Query; domain hooks live in `src/features/<domain>/hooks/` (e.g. `useTasks`, `useProposals`, `useSettings`).
 - Company profile (name, tagline, email, …) comes from `useCompanyInfo()` (`src/hooks/useCompanyInfo.ts`). `GET /cms/company` returns the fields flat — never read `data.data`.
-- Auth: `src/lib/auth.ts` `AuthManager` stores the JWT in localStorage (`suntrix_auth_token`).
+- Auth: `src/lib/auth.ts` `AuthManager` is the only owner of the session (`suntrix_auth_token`, `suntrix_refresh_token`, `suntrix_auth_user`); never read localStorage directly. `apiRequest` sends the token only on `/admin` pages (or with `{ auth: true }`) because the API treats any Bearer header as "show drafts"; concurrent 401s share one refresh. Log out with `logout()` from `@/lib/api`.
 - `src/lib/store.ts` is a deprecated empty stub and `src/lib/cms-store.ts` is the legacy localStorage CMS (mostly superseded by the API) — don't build new features on them. The README's "localStorage" backend-integration section is outdated for the same reason.
 - `@/` alias → `src/`. `src/components/ui/` are generated shadcn primitives (`components.json`); admin-specific shared components are in `src/components/admin/`.
 

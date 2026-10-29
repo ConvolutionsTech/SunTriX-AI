@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { authManager } from "@/lib/auth";
 import { Plus, Trash2, Edit2, X, Search, Filter, ChevronDown, Calendar, Eye, EyeOff, Clock, Copy, Paperclip } from "lucide-react";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
 import AIAssistPanel from "@/components/admin/AIAssistPanel";
@@ -80,7 +81,7 @@ const AdminBlog = () => {
         formData.append("folder", "suntrix");
 
         try {
-          const token = localStorage.getItem("auth_token");
+          const token = authManager.getToken();
           const res = await fetch(ENDPOINTS.UPLOAD_IMAGE, {
             method: "POST",
             headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },

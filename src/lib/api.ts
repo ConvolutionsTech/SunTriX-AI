@@ -277,80 +277,90 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  /**
+   * Send the admin access token. Defaults to true on /admin pages and false
+   * elsewhere: public pages must not send it, because the API treats any
+   * Bearer header as "show drafts and hidden items".
+   */
+  auth?: boolean;
+}
+
+function onAdminPage(): boolean {
+  return typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+}
+
+function redirectToLogin() {
+  if (onAdminPage() && window.location.pathname !== "/admin/login") {
+    window.location.href = "/admin/login";
+  }
+}
+
+// Single-flight refresh: concurrent 401s share one POST /auth/refresh
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = authManager.getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(ENDPOINTS.AUTH_REFRESH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.token || !data?.refreshToken) return null;
+    authManager.setTokens(data.token, data.refreshToken);
+    return data.token as string;
+  } catch {
+    return null;
+  }
+}
+
+function getFreshToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<{ data: T | null; error: string | null }> {
-  const { method = "GET", body, headers = {} } = options;
+  const { method = "GET", body, headers = {}, auth = onAdminPage() } = options;
 
-  try {
-    const token = authManager.getToken();
-    let res = await fetch(endpoint, {
+  const send = (token: string | null) =>
+    fetch(endpoint, {
       method,
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (res.status === 401 && endpoint !== ENDPOINTS.AUTH_REFRESH && endpoint !== ENDPOINTS.AUTH_LOGIN) {
-      const refreshToken = localStorage.getItem("refresh_token");
-      if (refreshToken) {
-        // Try to refresh
-        const refreshRes = await fetch(ENDPOINTS.AUTH_REFRESH, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+  try {
+    let res = await send(authManager.getToken());
 
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          if (refreshData.token && refreshData.refreshToken) {
-            localStorage.setItem("auth_token", refreshData.token);
-            localStorage.setItem("refresh_token", refreshData.refreshToken);
-            
-            // Retry the original request with the new token
-            res = await fetch(endpoint, {
-              method,
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${refreshData.token}`,
-                ...headers,
-              },
-              ...(body ? { body: JSON.stringify(body) } : {}),
-            });
-          } else {
-            // Refresh failed, clear tokens and redirect to login
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("suntrix_admin_session");
-            window.location.href = "/admin/login";
-            return { data: null, error: "Session expired. Please log in again." };
-          }
-        } else {
-          // Refresh failed, clear tokens and redirect to login
-          localStorage.removeItem("auth_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("suntrix_admin_session");
-          window.location.href = "/admin/login";
-          return { data: null, error: "Session expired. Please log in again." };
-        }
-      } else {
-        // No refresh token available, force logout
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("suntrix_admin_session");
-        window.location.href = "/admin/login";
+    // Only authenticated calls refresh or log out; a public 401 is just an error
+    if (res.status === 401 && auth && endpoint !== ENDPOINTS.AUTH_LOGIN && endpoint !== ENDPOINTS.AUTH_REFRESH) {
+      const token = await getFreshToken();
+      if (!token) {
+        authManager.clear();
+        redirectToLogin();
         return { data: null, error: "Session expired. Please log in again." };
       }
+      res = await send(token);
     }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Request failed" }));
-      return { data: null, error: err.message || `Error ${res.status}` };
+      const err = await res.json().catch(() => ({}));
+      return { data: null, error: err.message || err.error || `Error ${res.status}` };
     }
 
     const data = await res.json();
@@ -358,4 +368,13 @@ export async function apiRequest<T = unknown>(
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Network error" };
   }
+}
+
+/** Ends the admin session: best-effort server notification, then local clear. */
+export async function logout(): Promise<void> {
+  const token = authManager.getToken();
+  if (token) {
+    await fetch(ENDPOINTS.AUTH_LOGOUT, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  }
+  authManager.clear();
 }

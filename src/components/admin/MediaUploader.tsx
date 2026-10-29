@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, FileText, Film, Image, Loader2, File } from "lucide-react";
 import { ENDPOINTS } from "@/lib/api";
+import { authManager } from "@/lib/auth";
 
 export interface MediaAttachment {
   url: string;
@@ -54,7 +55,7 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
   const [errors, setErrors] = useState<string[]>([]);
 
   const uploadFile = async (file: File): Promise<MediaAttachment | null> => {
-    const token = localStorage.getItem("auth_token");
+    const token = authManager.getToken();
     const type = getFileType(file.name);
 
     let endpoint: string = ENDPOINTS.UPLOAD_IMAGE;

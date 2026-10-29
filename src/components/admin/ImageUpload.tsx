@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Upload, X, Loader2, Link as LinkIcon, Image as ImageIcon } from "lucide-react";
 import { ENDPOINTS } from "@/lib/api";
+import { authManager } from "@/lib/auth";
 
 interface ImageUploadProps {
   value: string;
@@ -24,7 +25,7 @@ export function ImageUpload({ value, onChange, className = "", placeholder = "ht
     formData.append("folder", "suntrix");
 
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = authManager.getToken();
       const res = await fetch(ENDPOINTS.UPLOAD_IMAGE, {
         method: "POST",
         headers: {
