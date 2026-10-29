@@ -280,5 +280,37 @@ describe("client lifecycle end to end", () => {
     expect((await TaskRequest.findById(task._id))!.status).toBe("in_progress");
     expect(await paymentService.reconcilePaidPayments()).toBe(0);
   });
-  it.todo("17. cancelling an engagement cascades to proposal, contract and open invoices");
+  it("17. cancelling an engagement closes its proposal, contract and open invoices", async () => {
+    const task = await TaskRequest.create({ name: "Gil", email: "gil@client.test", service: "AI", description: "A long enough description.", status: "contract_sent" });
+    const proposal = await Proposal.create({
+      proposalToken: "prop_cancel", taskRequestId: task._id, clientEmail: "gil@client.test", title: "X", totalAmount: 100_00,
+      milestones: [{ title: "All", amount: 100_00 }], status: "sent", expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    const contract = await Contract.create({
+      contractToken: "contract_cancel", proposalId: proposal._id, taskRequestId: task._id, clientName: "Gil", clientEmail: "gil@client.test",
+      projectTitle: "X", fullContractText: "t", status: "pending", expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    const invoice = await Payment.create({
+      invoiceToken: "inv_cancel", taskRequestId: task._id, clientEmail: "gil@client.test", description: "Deposit", amount: 100_00,
+      type: "invoice", status: "pending", stripeSessionId: "cs_cancel", sessionExpiresAt: new Date(Date.now() + 60 * 60_000),
+    });
+
+    expect((await request(app).put(`/v1/task-requests/${task._id}/status`).set(admin).send({ status: "cancelled", note: "Client withdrew" })).status).toBe(200);
+
+    expect((await Proposal.findById(proposal._id))!.status).toBe("rejected");
+    expect((await Contract.findById(contract._id))!.status).toBe("expired");
+    expect((await Payment.findById(invoice._id))!.status).toBe("cancelled");
+    expect(stripeAdapter.expireCheckoutSession).toHaveBeenCalledWith("cs_cancel");
+    expect((await request(app).post("/v1/payments/invoice/inv_cancel/checkout")).status).toBe(409);
+    expect((await request(app).post("/v1/contracts/contract_cancel/sign").send({ clientSignatureName: "Gil", agreed: true })).status).toBe(410);
+  });
+
+  it("17b. an engagement with a paid, un-refunded invoice can only be cancelled deliberately", async () => {
+    const task = await TaskRequest.create({ name: "Hal", email: "hal@client.test", service: "AI", description: "A long enough description.", status: "in_progress" });
+    await Payment.create({ invoiceToken: "inv_paid_cancel", taskRequestId: task._id, clientEmail: "hal@client.test", description: "Deposit", amount: 100_00, type: "invoice", status: "paid", paidAt: new Date(), sideEffectsDone: true });
+    const blocked = await request(app).put(`/v1/task-requests/${task._id}/status`).set(admin).send({ status: "cancelled" });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.code).toBe("HAS_PAID_PAYMENTS");
+    expect((await request(app).put(`/v1/task-requests/${task._id}/status`).set(admin).send({ status: "cancelled", note: "Refunded offline", force: true })).status).toBe(200);
+  });
 });

@@ -90,4 +90,23 @@ describe("Stripe webhook handling (A16, M27, M39, N-LC-4)", () => {
       .set("stripe-signature", stripe.webhooks.generateTestHeaderString({ payload, secret: SECRET })).send(payload);
     expect(res.status).toBe(200);
   });
+
+  it("admin refund goes through Stripe; the payment flips when Stripe confirms", async () => {
+    await seed();
+    await send(completed("evt_r1"));
+    const payment = await Payment.findOne({ invoiceToken: "inv_w" });
+    const createRefund = vi.spyOn(stripeAdapter, "createRefund").mockResolvedValue({ id: "re_admin" });
+    const { staffToken } = await import("./helpers/auth");
+    const auth = { Authorization: `Bearer ${await staffToken("admin")}` };
+
+    expect((await request(app).post(`/v1/payments/admin/refund/${payment!._id}`).set(auth).send({ amountCents: 5000 })).status).toBe(400);
+    const res = await request(app).post(`/v1/payments/admin/refund/${payment!._id}`).set(auth).send({});
+    expect(res.status).toBe(200);
+    expect(createRefund).toHaveBeenCalledWith("pi_w", undefined, "requested_by_customer");
+    expect((await Payment.findById(payment!._id))!.refundId).toBe("re_admin");
+
+    await send({ id: "evt_r2", type: "charge.refunded", data: { object: { payment_intent: "pi_w", refunds: { data: [{ id: "re_admin" }] } } } });
+    expect((await Payment.findById(payment!._id))!.status).toBe("refunded");
+    expect((await request(app).post(`/v1/payments/admin/refund/${payment!._id}`).set(auth).send({})).status).toBe(409);
+  });
 });

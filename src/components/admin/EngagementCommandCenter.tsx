@@ -82,15 +82,18 @@ export const EngagementCommandCenter = ({
     setLoading(false);
   };
 
-  const handleAdvanceStage = async (nextStatus: string, note = "") => {
+  const handleAdvanceStage = async (nextStatus: string, note = "", force = false) => {
     if (!request) return;
     setActionLoading(true);
-    const { error } = await apiRequest(ENDPOINTS.TASK_REQUEST_UPDATE_STATUS(request._id), {
+    const { error, status } = await apiRequest(ENDPOINTS.TASK_REQUEST_UPDATE_STATUS(request._id), {
       method: "PUT",
-      body: { status: nextStatus, note },
+      body: { status: nextStatus, note, ...(force && { force: true }) },
     });
     setActionLoading(false);
-    if (error) window.alert(error);
+    // A paid invoice blocks cancellation unless the admin confirms (refunds are handled in Payments)
+    if (error && status === 409 && nextStatus === "cancelled" && !force) {
+      if (window.confirm(`${error}\n\nCancel anyway without refunding?`)) return handleAdvanceStage(nextStatus, note, true);
+    } else if (error) window.alert(error);
     onRefresh();
     fetchRelatedData();
   };

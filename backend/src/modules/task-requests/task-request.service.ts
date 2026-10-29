@@ -1,3 +1,5 @@
+import Proposal from "../../models/Proposal";
+import { stripeAdapter } from "../../integrations/stripe/stripe.adapter";
 import crypto from "crypto";
 import { taskRequestRepository, TaskRequestRepository } from "./task-request.repository";
 import { TaskStatusMachine, ActorRole } from "../../services/taskStatusMachine";
@@ -61,6 +63,33 @@ export class TaskRequestService {
     note: string = ""
   ): Promise<ITaskRequest> {
     return TaskStatusMachine.transition(id, newStatus, actorRole, note);
+  }
+
+  /**
+   * Cancels an engagement and everything still open on it: proposals can no
+   * longer be accepted, contracts signed or invoices paid (open Stripe sessions
+   * are expired). Refused while the client has a paid, un-refunded payment —
+   * refund first, or pass force with a reason.
+   */
+  async cancelEngagement(id: string, note: string, force = false): Promise<ITaskRequest> {
+    const paid = await Payment.countDocuments({ taskRequestId: id, status: "paid" });
+    if (paid > 0 && !force) {
+      throw Object.assign(
+        new AppError("This engagement has a paid invoice. Refund it first, or confirm cancelling anyway.", ERROR_CODES.CONFLICT),
+        { code: "HAS_PAID_PAYMENTS" }
+      );
+    }
+
+    const task = await TaskStatusMachine.transition(id, "cancelled", "admin", note || "Cancelled by admin");
+
+    await Proposal.updateMany({ taskRequestId: id, status: { $in: ["draft", "sent", "changes_requested", "processing"] } }, { $set: { status: "rejected" } });
+    await Contract.updateMany({ taskRequestId: id, status: "pending" }, { $set: { status: "expired" } });
+    const openInvoices = await Payment.find({ taskRequestId: id, status: "pending" }).select("stripeSessionId").lean();
+    await Payment.updateMany({ taskRequestId: id, status: "pending" }, { $set: { status: "cancelled" }, $unset: { stripeSessionId: 1, sessionExpiresAt: 1 } });
+    for (const p of openInvoices) {
+      if (p.stripeSessionId) await stripeAdapter.expireCheckoutSession(p.stripeSessionId);
+    }
+    return task;
   }
 
   async getAllTasks(filter: Record<string, unknown> = {}, limit = 100, skip = 0): Promise<{ tasks: ITaskRequest[]; total: number }> {

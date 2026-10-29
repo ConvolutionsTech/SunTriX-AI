@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { paymentService } from "../modules/payments/payment.service";
 import { requireAuth } from "../middleware/auth";
-import { validate, InvoiceCreateSchema } from "../middleware/validate";
+import { validate, InvoiceCreateSchema, RefundSchema } from "../middleware/validate";
 import { logAudit } from "../lib/audit";
 import { AppError } from "../shared/errors/appError";
 import Payment from "../models/Payment";
@@ -57,6 +57,20 @@ router.get("/admin/stats", requireAuth, async (_req: Request, res: Response, nex
       thisMonthCents: month[0]?.total ?? 0,
       pendingCount,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /payments/admin/refund/:id — admin refunds a Stripe payment (full or partial)
+router.post("/admin/refund/:id", requireAuth, validate(RefundSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payment = await paymentService.refund(req.params.id, req.body.amountCents, req.body.reason);
+    await logAudit(req, "update", "payment", req.params.id, `Refund requested: ${payment.description}`, {
+      amountCents: req.body.amountCents ?? payment.amount,
+      reason: req.body.reason,
+    });
+    res.json({ message: "Refund requested — the payment shows as refunded once Stripe confirms.", payment });
   } catch (err) {
     next(err);
   }

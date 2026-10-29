@@ -57,8 +57,10 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 // PUT /task-requests/:id/status — admin status update
 router.put("/:id/status", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { status, note } = req.body;
-    const task = await taskRequestService.transitionStatus(req.params.id, status, "admin", note);
+    const { status, note, force } = req.body;
+    const task = status === "cancelled"
+      ? await taskRequestService.cancelEngagement(req.params.id, note, force === true)
+      : await taskRequestService.transitionStatus(req.params.id, status, "admin", note);
     await logAudit(req, "status_change", "task", task._id.toString(), task.projectTitle || task.name, { newStatus: status });
     res.json(task);
   } catch (err) {

@@ -194,6 +194,12 @@ export const ContactReplySchema = z.object({
   body:      z.string().trim().min(1, "Message is required").max(20000, "Message too long"),
 });
 
+// POST /payments/admin/refund/:id — omit amountCents for a full refund
+export const RefundSchema = z.object({
+  amountCents: z.number().int().min(1).optional(),
+  reason: z.enum(["requested_by_customer", "duplicate", "fraudulent"]).optional().default("requested_by_customer"),
+});
+
 // POST /payments/admin/create-invoice
 export const InvoiceCreateSchema = z.object({
   taskRequestId: z.string().regex(/^[a-f\d]{24}$/i, "taskRequestId is required"),

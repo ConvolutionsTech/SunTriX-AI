@@ -289,6 +289,24 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Issues a Stripe refund. The payment flips to "refunded" when Stripe sends
+   * charge.refunded (handled in applyEvent).
+   */
+  async refund(paymentId: string, amountCents: number | undefined, reason: string): Promise<IPayment> {
+    const payment = await Payment.findById(paymentId);
+    if (!payment) throw new AppError("Payment not found", ERROR_CODES.NOT_FOUND);
+    if (payment.status !== "paid") throw new AppError(`A ${payment.status} payment can't be refunded.`, ERROR_CODES.CONFLICT);
+    if (!payment.stripePaymentIntentId) throw new AppError("This payment wasn't made through Stripe — refund it the way it was paid.", ERROR_CODES.CONFLICT);
+    if (amountCents && amountCents > payment.amount) throw new AppError("Refund can't exceed the amount paid.", ERROR_CODES.BAD_REQUEST);
+
+    const refund = await this.stripe.createRefund(payment.stripePaymentIntentId, amountCents, reason);
+    payment.refundId = refund.id;
+    payment.refundReason = reason;
+    await payment.save();
+    return payment;
+  }
+
   /** Retries post-payment work that didn't finish (called by the scheduler). */
   async reconcilePaidPayments(olderThanMs = 2 * 60_000): Promise<number> {
     const stuck = await this.paymentRepo.findPendingSideEffects(new Date(Date.now() - olderThanMs));

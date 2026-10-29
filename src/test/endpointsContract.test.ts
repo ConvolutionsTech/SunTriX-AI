@@ -35,7 +35,6 @@ const toPattern = (route: string) =>
 // Entries with no backend route yet, each scheduled in PRODUCTION_PLAN.md. The
 // test fails once one exists, so the list can only shrink.
 const KNOWN_MISSING = new Set<string>([
-  "PAYMENT_ADMIN_REFUND", // T-LC-6
 ]);
 
 describe("frontend ENDPOINTS match backend routes", () => {
