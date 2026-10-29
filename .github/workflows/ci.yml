@@ -63,7 +63,7 @@ jobs:
       - run: npm run build
       - name: Build output contains no tests
         run: test ! -e dist/test
-      - run: npm test
+      - run: npm run test:coverage
 
   docker:
     name: Backend Docker image
