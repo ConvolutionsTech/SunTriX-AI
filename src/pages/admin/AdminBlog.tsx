@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS } from "@/lib/api";
-import { authManager } from "@/lib/auth";
+import { apiRequest, ENDPOINTS, apiUpload } from "@/lib/api";
 import { Plus, Trash2, Edit2, X, Search, Filter, ChevronDown, Calendar, Eye, EyeOff, Clock, Copy, Paperclip } from "lucide-react";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
 import AIAssistPanel from "@/components/admin/AIAssistPanel";
@@ -81,14 +80,8 @@ const AdminBlog = () => {
         formData.append("folder", "suntrix");
 
         try {
-          const token = authManager.getToken();
-          const res = await fetch(ENDPOINTS.UPLOAD_IMAGE, {
-            method: "POST",
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: formData,
-          });
-          if (!res.ok) throw new Error("Upload failed");
-          const data = await res.json();
+          const { data, error } = await apiUpload<{ url?: string; secureUrl?: string }>(ENDPOINTS.UPLOAD_IMAGE, formData);
+          if (error || !data) throw new Error(error || "Upload failed");
           const url = data.url || data.secureUrl;
 
           const quill = quillRef.current?.getEditor();
@@ -99,7 +92,7 @@ const AdminBlog = () => {
           }
         } catch (err) {
           console.error("Image upload failed", err);
-          alert("Failed to upload image. Please try again.");
+          alert(`Failed to upload image: ${err instanceof Error ? err.message : "please try again"}`);
         }
       }
     };

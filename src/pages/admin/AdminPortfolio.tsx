@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS } from "@/lib/api";
-import { authManager } from "@/lib/auth";
+import { apiRequest, ENDPOINTS, apiUpload } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Eye, EyeOff, Star, StarOff, X, Save, Video, Image, Monitor, Copy } from "lucide-react";
 import LivePreview from "@/components/admin/LivePreview";
@@ -217,19 +216,14 @@ const AdminPortfolio = () => {
         if (files.length === 0) return;
         setUp(true);
         
-        const token = authManager.getToken();
         const endpoint = type === "image" ? ENDPOINTS.UPLOAD_IMAGE : ENDPOINTS.UPLOAD_VIDEO;
 
         try {
           const uploadPromises = files.map(async (file) => {
             const formData = new FormData();
             formData.append("file", file);
-            const res = await fetch(endpoint, {
-              method: "POST",
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-              body: formData,
-            });
-            const data = await res.json();
+            const { data, error } = await apiUpload<{ secureUrl?: string; url?: string }>(endpoint, formData);
+            if (error || !data) throw new Error(error || "Upload failed");
             return data.secureUrl || data.url;
           });
 
@@ -241,8 +235,8 @@ const AdminPortfolio = () => {
             onUpload(urls[0]);
           }
           toast({ title: files.length > 1 ? `Uploaded ${files.length} files ✅` : "Uploaded ✅" });
-        } catch {
-          toast({ title: "Upload failed" });
+        } catch (err) {
+          toast({ title: "Upload failed", description: err instanceof Error ? err.message : undefined });
         } finally { setUp(false); }
       };
       input.click();

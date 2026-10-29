@@ -275,6 +275,7 @@ import { authManager } from "./auth";
 
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** JSON-serialisable value, or FormData for file uploads (sent as multipart) */
   body?: unknown;
   headers?: Record<string, string>;
   /**
@@ -333,15 +334,17 @@ export async function apiRequest<T = unknown>(
 ): Promise<{ data: T | null; error: string | null }> {
   const { method = "GET", body, headers = {}, auth = onAdminPage() } = options;
 
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
   const send = (token: string | null) =>
     fetch(endpoint, {
       method,
       headers: {
-        "Content-Type": "application/json",
+        // Multipart bodies set their own Content-Type (with boundary)
+        ...(isForm ? {} : { "Content-Type": "application/json" }),
         ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: isForm ? (body as FormData) : JSON.stringify(body) } : {}),
     });
 
   try {
@@ -368,6 +371,11 @@ export async function apiRequest<T = unknown>(
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Network error" };
   }
+}
+
+/** Authenticated multipart upload with the same refresh and error handling as apiRequest. */
+export function apiUpload<T = unknown>(endpoint: string, formData: FormData) {
+  return apiRequest<T>(endpoint, { method: "POST", body: formData, auth: true });
 }
 
 /** Ends the admin session: best-effort server notification, then local clear. */

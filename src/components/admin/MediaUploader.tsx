@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, FileText, Film, Image, Loader2, File } from "lucide-react";
-import { ENDPOINTS } from "@/lib/api";
-import { authManager } from "@/lib/auth";
+import { ENDPOINTS, apiUpload } from "@/lib/api";
 import { safeHref } from "@/lib/sanitize";
 
 export interface MediaAttachment {
@@ -56,7 +55,6 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
   const [errors, setErrors] = useState<string[]>([]);
 
   const uploadFile = async (file: File): Promise<MediaAttachment | null> => {
-    const token = authManager.getToken();
     const type = getFileType(file.name);
 
     let endpoint: string = ENDPOINTS.UPLOAD_IMAGE;
@@ -66,18 +64,8 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Upload failed" }));
-      throw new Error(err.message || "Upload failed");
-    }
-
-    const data = await res.json();
+    const { data, error } = await apiUpload<{ url?: string; secureUrl?: string; publicId?: string; _id?: string }>(endpoint, formData);
+    if (error || !data) throw new Error(error || "Upload failed");
     return {
       url: data.url || data.secureUrl,
       type,

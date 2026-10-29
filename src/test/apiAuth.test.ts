@@ -129,3 +129,35 @@ describe("session storage", () => {
     expect(authManager.getUser()).toBeNull();
   });
 });
+
+describe("apiUpload (T-FE-9)", () => {
+  it("sends multipart without a JSON content type and refreshes an expired token", async () => {
+    const { apiUpload, authManager, ENDPOINTS } = await load();
+    authManager.login("expired", "refresh-1", { id: "1", email: "a@x.test", role: "admin" });
+
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      if (url === ENDPOINTS.AUTH_REFRESH) return json(200, { token: "access-2", refreshToken: "refresh-2" });
+      const auth = (init.headers as Record<string, string>).Authorization;
+      return auth === "Bearer access-2" ? json(201, { url: "https://cdn.test/a.png" }) : json(401, { message: "expired" });
+    });
+
+    const form = new FormData();
+    form.append("file", new Blob(["x"]), "a.png");
+    const res = await apiUpload<{ url: string }>(ENDPOINTS.UPLOAD_IMAGE, form);
+
+    expect(res).toEqual({ data: { url: "https://cdn.test/a.png" }, error: null });
+    const lastInit = fetchMock.mock.calls.at(-1)![1] as RequestInit;
+    expect(lastInit.body).toBe(form);
+    expect((lastInit.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+
+  it("surfaces the backend's error message", async () => {
+    const { apiUpload, authManager, ENDPOINTS } = await load();
+    authManager.login("access-1", "refresh-1", { id: "1", email: "a@x.test", role: "admin" });
+    fetchMock.mockResolvedValue(json(413, { error: "File too large (max 50 MB)" }));
+
+    const res = await apiUpload(ENDPOINTS.UPLOAD_IMAGE, new FormData());
+    expect(res.error).toBe("File too large (max 50 MB)");
+  });
+});
+

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS } from "../lib/api";
-import { authManager } from "@/lib/auth";
+import { apiRequest, ENDPOINTS, apiUpload } from "../lib/api";
 import { toast } from "react-hot-toast";
 import { safeHref } from "@/lib/sanitize";
 import {
@@ -145,16 +144,12 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const res = await fetch(ENDPOINTS.TRACKER_ADMIN_FILE_UPLOAD(tracker._id), {
-        method: "POST",
-        headers: { Authorization: `Bearer ${authManager.getToken() || ""}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Upload failed");
+      const { error } = await apiUpload(ENDPOINTS.TRACKER_ADMIN_FILE_UPLOAD(tracker._id), formData);
+      if (error) throw new Error(error);
       toast.success("File uploaded & client notified!");
       fetchTracker(true);
-    } catch {
-      toast.error("Upload failed. Please try again.");
+    } catch (err) {
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : "please try again"}`);
     } finally {
       setUploadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

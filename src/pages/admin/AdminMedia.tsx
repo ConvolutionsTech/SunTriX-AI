@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest, ENDPOINTS } from "@/lib/api";
-import { authManager } from "@/lib/auth";
+import { apiRequest, ENDPOINTS, apiUpload } from "@/lib/api";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import { safeHref } from "@/lib/sanitize";
@@ -77,25 +76,22 @@ export const AdminMedia = () => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
     setUploading(true);
+    const failures: string[] = [];
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       setUploadProgress(`Uploading (${i + 1}/${fileArray.length}): ${file.name}`);
       const formData = new FormData();
       formData.append("file", file);
-      const token = authManager.getToken();
-
       const isVideo = file.type.startsWith("video/") || [".mp4", ".mov", ".webm", ".avi", ".mkv"].some((ext) => file.name.toLowerCase().endsWith(ext));
       const isDoc = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt"].some((ext) => file.name.toLowerCase().endsWith(ext));
       const endpoint = isVideo ? ENDPOINTS.UPLOAD_VIDEO : isDoc ? ENDPOINTS.UPLOAD_DOCUMENT : ENDPOINTS.UPLOAD_IMAGE;
 
-      await fetch(endpoint, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
+      const { error } = await apiUpload(endpoint, formData);
+      if (error) failures.push(`${file.name}: ${error}`);
     }
 
+    if (failures.length) alert(`Some files could not be uploaded:\n${failures.join("\n")}`);
     setUploading(false);
     setUploadProgress("");
     setShowUploadDropzone(false);
