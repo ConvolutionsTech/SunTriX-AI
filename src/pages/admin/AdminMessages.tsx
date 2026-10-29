@@ -63,7 +63,7 @@ const AdminMessages = () => {
     setSending(true);
     const { error } = await apiRequest(ENDPOINTS.CONTACT_REPLY, {
       method: "POST",
-      body: { toEmail: selected.email, subject: replySubject, body: replyBody, messageId: selected._id }
+      body: { messageId: selected._id, subject: replySubject, body: replyBody }
     });
     setSending(false);
     

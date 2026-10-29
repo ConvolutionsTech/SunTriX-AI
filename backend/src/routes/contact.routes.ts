@@ -1,8 +1,10 @@
 import { Router, Request, Response, NextFunction } from "express";
 import ContactMessage from "../models/ContactMessage";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
-import { validate, ContactSchema } from "../middleware/validate";
+import { validate, ContactSchema, ContactReplySchema } from "../middleware/validate";
+import { escapeHtml } from "../lib/escapeHtml";
+import { logAudit } from "../lib/audit";
 import { sendContactNotification } from "../services/email";
 
 const router = Router();
@@ -57,21 +59,20 @@ router.put("/:id/read", requireAuth, async (req: Request, res: Response, next: N
   }
 });
 
-// POST /contact/reply — admin
-router.post("/reply", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+// POST /contact/reply — admin replies to a stored message (not an open relay)
+router.post("/reply", requireAuth, validate(ContactReplySchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { toEmail, subject, body, messageId } = req.body;
-    if (!toEmail || !subject || !body) {
-      return next(createError("Email, subject, and body are required", 400));
-    }
+    const { subject, body, messageId } = req.body;
+    const message = await ContactMessage.findById(messageId);
+    if (!message) return next(createError("Message not found", 404));
 
+    // The reply is typed as plain text: escape it and keep its line breaks
+    const html = `<div style="font-family: sans-serif; white-space: normal;">${escapeHtml(body).replace(/\n/g, "<br>")}</div>`;
     const { sendDirectReply } = await import("../services/email");
-    await sendDirectReply(toEmail, subject, body);
+    await sendDirectReply(message.email, subject, html);
 
-    if (messageId) {
-      await ContactMessage.findByIdAndUpdate(messageId, { read: true });
-    }
-
+    await ContactMessage.findByIdAndUpdate(messageId, { read: true });
+    await logAudit(req, "reply", "contact", messageId, message.email);
     res.json({ message: "Reply sent successfully" });
   } catch (err) {
     next(err);

@@ -148,6 +148,13 @@ export const ProposalCreateSchema = z.object({
   aiDrafted: z.boolean().optional().default(false),
 });
 
+// POST /contact/reply — recipient comes from the stored message, never the request
+export const ContactReplySchema = z.object({
+  messageId: z.string().regex(/^[a-f\d]{24}$/i, "messageId is required"),
+  subject:   z.string().trim().min(1, "Subject is required").max(200, "Subject too long"),
+  body:      z.string().trim().min(1, "Message is required").max(20000, "Message too long"),
+});
+
 // POST /payments/admin/create-invoice
 export const InvoiceCreateSchema = z.object({
   taskRequestId: z.string().optional().nullable(),

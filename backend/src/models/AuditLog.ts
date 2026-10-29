@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export type AuditAction = "create" | "update" | "delete" | "publish" | "login" | "bulk_delete" | "bulk_update" | "status_change" | "broadcast" | "reorder" | "bulk_import";
+export type AuditAction = "create" | "update" | "delete" | "publish" | "login" | "bulk_delete" | "bulk_update" | "status_change" | "broadcast" | "reorder" | "bulk_import" | "reply";
 
 export interface IAuditLog extends Document {
   action: AuditAction;
@@ -17,7 +17,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
   {
     action: {
       type: String,
-      enum: ["create", "update", "delete", "publish", "login", "bulk_delete", "bulk_update", "status_change", "broadcast", "reorder", "bulk_import"],
+      enum: ["create", "update", "delete", "publish", "login", "bulk_delete", "bulk_update", "status_change", "broadcast", "reorder", "bulk_import", "reply"],
       required: true,
     },
     entity: { type: String, required: true },
