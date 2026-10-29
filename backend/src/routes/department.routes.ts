@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Department from "../models/Department";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
@@ -20,7 +21,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
 });
 
 // PUT /departments/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -35,7 +36,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // DELETE /departments/bulk — admin bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -46,7 +47,7 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // POST /departments/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
@@ -69,7 +70,7 @@ router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: N
 });
 
 // POST /departments — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dept = await Department.create(req.body);
     res.status(201).json(dept);
@@ -79,9 +80,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /departments/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Department), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const dept = await Department.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const dept = await Department.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!dept) return next(createError("Department not found", 404));
     res.json(dept);
   } catch (err) {

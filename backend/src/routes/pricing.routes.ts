@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Pricing from "../models/Pricing";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
@@ -18,7 +19,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
 });
 
 // PUT /pricing/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -33,7 +34,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // DELETE /pricing/bulk — admin bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -44,7 +45,7 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // POST /pricing/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Pricing), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
@@ -56,7 +57,7 @@ router.post("/bulk/import", requireAuth, async (req: Request, res: Response, nex
 });
 
 // POST /pricing — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Pricing), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const plan = await Pricing.create(req.body);
     await logAudit(req, "create", "pricing", plan._id.toString(), plan.name);
@@ -65,9 +66,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /pricing/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Pricing), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const plan = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const plan = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!plan) return next(createError("Pricing plan not found", 404));
     await logAudit(req, "update", "pricing", plan._id.toString(), plan.name);
     res.json(plan);

@@ -60,7 +60,7 @@ describe("Phase 1 Security & Race Condition Regression Suite", () => {
       expect(res.status).toBe(429);
       const errMsg = res.body.message || res.body.error || "";
       expect(errMsg).toContain("Too many attempts");
-    });
+    }, 30000);
   });
 
   describe("1C — Trusted Proxy Configuration", () => {

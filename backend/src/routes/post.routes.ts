@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Post from "../models/Post";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems, bulkUpdate } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
 import sanitizeHtml from "sanitize-html";
@@ -64,7 +65,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 });
 
 // POST /posts — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = { ...req.body };
     if (!data.slug && data.title) {
@@ -83,7 +84,7 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /posts/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = { ...req.body };
     if (data.status === "published" && !data.publishedAt) {
@@ -92,7 +93,7 @@ router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
     if (data.content) {
       data.content = sanitizeHtml(data.content, sanitizeOptions);
     }
-    const post = await Post.findByIdAndUpdate(req.params.id, data, { new: true });
+    const post = await Post.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!post) return next(createError("Post not found", 404));
     await logAudit(req, "update", "post", post._id.toString(), post.title);
     res.json(post);
@@ -110,7 +111,7 @@ router.delete("/:id", requireAuth, async (req: Request, res: Response, next: Nex
 });
 
 // DELETE /posts/bulk — bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -121,19 +122,19 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // PUT /posts/bulk — bulk status update
-router.put("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/bulk", requireAuth, bulkUpdate(["status", "featured", "category"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
     if (update.status === "published") update.publishedAt = new Date();
-    await Post.updateMany({ _id: { $in: ids } }, update);
+    await Post.updateMany({ _id: { $in: ids } }, update, { runValidators: true });
     await logAudit(req, "bulk_update", "post", "", `${ids.length} posts`);
     res.json({ message: `Updated ${ids.length} posts` });
   } catch (err) { next(err); }
 });
 
 // POST /posts/bulk/import — bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Post, { protect: ["views"] }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));

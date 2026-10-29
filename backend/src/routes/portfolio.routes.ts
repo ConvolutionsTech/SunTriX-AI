@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Portfolio from "../models/Portfolio";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems, bulkUpdate } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 import slugify from "slugify";
 
@@ -28,7 +29,7 @@ router.get("/slug/:slug", optionalAuth, async (req: AuthRequest, res: Response, 
 });
 
 // PUT /portfolio/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -43,7 +44,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // DELETE /portfolio/bulk — admin bulk delete (must be before /:id)
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -54,18 +55,18 @@ router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // PUT /portfolio/bulk — admin bulk update (must be before /:id)
-router.put("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/bulk", requireAuth, bulkUpdate(["status", "featured", "category"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids, update }: { ids: string[]; update: Record<string, unknown> } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
-    await Portfolio.updateMany({ _id: { $in: ids } }, update);
+    await Portfolio.updateMany({ _id: { $in: ids } }, update, { runValidators: true });
     await logAudit(req, "bulk_update", "portfolio", "", `${ids.length} projects`);
     res.json({ message: `Updated ${ids.length} projects` });
   } catch (err) { next(err); }
 });
 
 // POST /portfolio/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Portfolio), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
@@ -92,7 +93,7 @@ router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: N
 });
 
 // POST /portfolio  — admin only
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Portfolio), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = { ...req.body };
     if (!body.slug) body.slug = slugify(body.title || "untitled", { lower: true, strict: true });
@@ -106,7 +107,7 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /portfolio/:id  — admin only
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Portfolio), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const project = await Portfolio.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!project) return next(createError("Project not found", 404));

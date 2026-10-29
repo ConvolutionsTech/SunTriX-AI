@@ -1,4 +1,6 @@
+import TaskRequest from "../models/TaskRequest";
 import { Router, Request, Response, NextFunction } from "express";
+import { writable } from "../middleware/bodyPolicy";
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate, TaskRequestSchema } from "../middleware/validate";
@@ -64,8 +66,13 @@ router.put("/:id/status", requireAuth, requireRole("admin"), async (req: Request
   }
 });
 
-// PUT /task-requests/:id — admin general update
-router.put("/:id", requireAuth, requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+// PUT /task-requests/:id — admin edit of descriptive fields. Workflow state
+// (status, tokens, linked documents, soft-delete) only changes through its own endpoints.
+const TASK_WORKFLOW_FIELDS = [
+  "status", "statusHistory", "trackingToken", "contractToken", "proposalId",
+  "contractSignedAt", "contractClientName", "deletedAt", "deletedBy",
+];
+router.put("/:id", requireAuth, requireRole("admin"), writable(TaskRequest, { protect: TASK_WORKFLOW_FIELDS }), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const task = await taskRequestService.updateTask(req.params.id, req.body);
     await logAudit(req, "update", "task", task._id.toString(), task.projectTitle || task.name);

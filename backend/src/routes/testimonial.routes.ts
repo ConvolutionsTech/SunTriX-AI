@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Testimonial from "../models/Testimonial";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable } from "../middleware/bodyPolicy";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
 });
 
 // POST /testimonials — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Testimonial), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const t = await Testimonial.create(req.body);
     res.status(201).json(t);
@@ -28,9 +29,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /testimonials/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Testimonial), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const t = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const t = await Testimonial.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!t) return next(createError("Testimonial not found", 404));
     res.json(t);
   } catch (err) {

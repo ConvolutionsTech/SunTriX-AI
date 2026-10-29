@@ -91,7 +91,7 @@ export class TaskRequestService {
   async updateTask(id: string, data: Record<string, unknown>): Promise<ITaskRequest> {
     const task = await this.repo.findById(id);
     if (!task) throw new AppError("Task request not found", ERROR_CODES.NOT_FOUND);
-    const updated = await TaskRequest.findOneAndUpdate({ _id: id, deletedAt: null }, data, { new: true });
+    const updated = await TaskRequest.findOneAndUpdate({ _id: id, deletedAt: null }, { $set: data }, { new: true, runValidators: true });
     if (!updated) throw new AppError("Failed to update task", ERROR_CODES.INTERNAL_SERVER_ERROR);
     return updated;
   }

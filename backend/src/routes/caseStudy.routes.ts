@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import CaseStudy from "../models/CaseStudy";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable } from "../middleware/bodyPolicy";
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get("/:id", optionalAuth, async (req: AuthRequest, res: Response, next: N
 });
 
 // POST /case-studies — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(CaseStudy), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const study = await CaseStudy.create(req.body);
     res.status(201).json(study);
@@ -49,9 +50,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /case-studies/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(CaseStudy), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const study = await CaseStudy.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const study = await CaseStudy.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!study) return next(createError("Case study not found", 404));
     res.json(study);
   } catch (err) {

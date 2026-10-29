@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import Client from "../models/Client";
 import { requireAuth, optionalAuth, AuthRequest } from "../middleware/auth";
 import { createError } from "../middleware/errorHandler";
+import { writable, idsBody, bulkItems } from "../middleware/bodyPolicy";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
@@ -18,7 +19,7 @@ router.get("/", optionalAuth, async (req: AuthRequest, res: Response, next: Next
 });
 
 // PUT /clients/reorder — admin bulk reorder
-router.put("/reorder", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/reorder", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids || !Array.isArray(ids)) return next(createError("Array of IDs required", 400));
@@ -33,7 +34,7 @@ router.put("/reorder", requireAuth, async (req: Request, res: Response, next: Ne
 });
 
 // POST /clients — admin
-router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", requireAuth, writable(Client), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const client = await Client.create(req.body);
     await logAudit(req, "create", "client", client._id.toString(), client.name);
@@ -42,9 +43,9 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
 });
 
 // PUT /clients/:id — admin
-router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.put("/:id", requireAuth, writable(Client), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!client) return next(createError("Client not found", 404));
     await logAudit(req, "update", "client", client._id.toString(), client.name);
     res.json(client);
@@ -52,7 +53,7 @@ router.put("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
 });
 
 // DELETE /clients/bulk — admin bulk delete
-router.delete("/bulk", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.delete("/bulk", requireAuth, idsBody, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ids }: { ids: string[] } = req.body;
     if (!ids?.length) return next(createError("IDs required", 400));
@@ -73,7 +74,7 @@ router.delete("/:id", requireAuth, async (req: Request, res: Response, next: Nex
 });
 
 // POST /clients/bulk/import — admin bulk import
-router.post("/bulk/import", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/bulk/import", requireAuth, bulkItems(Client), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { items } = req.body;
     if (!items || !Array.isArray(items)) return next(createError("Array of items required", 400));
