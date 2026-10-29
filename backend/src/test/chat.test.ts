@@ -14,6 +14,15 @@ afterEach(() => {
 });
 
 describe("public chatbot (M1, M43)", () => {
+  // Chat quota and AI budget counters live in MongoDB
+  beforeAll(async () => {
+    await connectTestDb();
+  }, 120000);
+
+  afterAll(async () => {
+    await disconnectTestDb();
+  });
+
   it("is off when the admin disables the chatbot or AI", async () => {
     const groq = vi.spyOn(groqAdapter, "generateChatCompletion");
 

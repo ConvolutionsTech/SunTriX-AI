@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { sendChat } from "../services/groq";
 import { getSetting } from "../lib/configLoader";
+import { assertAiBudget, consumeChatQuota } from "../lib/aiBudget";
 
 const router = Router();
 
@@ -33,6 +34,10 @@ router.post("/", async (req: Request, res: Response, next: NextFunction) => {
       res.status(400).json({ error: `Invalid message format or message content exceeds ${MAX_MESSAGE_LENGTH} characters` });
       return;
     }
+
+    // Cost controls: per-visitor daily cap, then the global daily token budget
+    await consumeChatQuota(req.ip ?? "unknown");
+    await assertAiBudget();
 
     // sendChat bounds the context, builds the brand-aware system prompt and
     // turns Groq failures (incl. timeouts) into a friendly fallback message

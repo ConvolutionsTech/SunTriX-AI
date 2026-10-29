@@ -8,6 +8,7 @@ import Post from "../models/Post";
 import EmailLog from "../models/EmailLog";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import { outboxStatus, requeueEmail } from "../lib/emailOutbox";
+import { aiUsageSummary } from "../lib/aiBudget";
 import { logAudit } from "../lib/audit";
 import { createError } from "../middleware/errorHandler";
 
@@ -181,6 +182,14 @@ router.get("/activity", requireAuth, async (req: Request, res: Response, next: N
     ];
 
     res.json({ trendChart, taskPipeline, topServices, growth, contentHealth, feed, funnel });
+  } catch (err) { next(err); }
+});
+
+// GET /admin/ai-usage?days=7 — tokens and calls per day and operation, plus today's budget
+router.get("/ai-usage", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const days = Math.min(Math.max(parseInt(String(req.query.days)) || 7, 1), 90);
+    res.json(await aiUsageSummary(days));
   } catch (err) { next(err); }
 });
 

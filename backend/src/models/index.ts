@@ -1,5 +1,6 @@
 /** Importing this module registers every Mongoose model (used by scripts). */
 import "./Admin";
+import "./AiUsage";
 import "./AuditLog";
 import "./Campaign";
 import "./CampaignRecipient";
@@ -26,4 +27,5 @@ import "./TaskRequest";
 import "./Team";
 import "./Testimonial";
 import "./TrackerMessage";
+import "./UsageCounter";
 import "./WebhookEvent";

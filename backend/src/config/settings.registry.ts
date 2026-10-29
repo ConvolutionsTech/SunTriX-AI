@@ -41,6 +41,8 @@ const modelId = text(100).regex(/^[\w./:-]+$/, "Invalid model id");
 export const SETTINGS_REGISTRY: SettingDef[] = [
   // ─── AI ─────────────────────────────────────────────────────────
   { key: "AI_ENABLED", section: "ai", label: "Enable AI features", description: "Master switch for the chatbot and AI drafting", type: "toggle", default: "true", schema: toggle },
+  { key: "AI_DAILY_TOKEN_BUDGET", section: "ai", label: "Daily AI token budget", description: "All AI calls stop for the day (UTC) once this many tokens are used; 0 = no limit", type: "number", default: "500000", schema: intIn(0, 1_000_000_000) },
+  { key: "CHAT_DAILY_PER_IP", section: "ai", label: "Chat messages per visitor per day", description: "Website chatbot cap per IP address; 0 = no limit", type: "number", default: "60", schema: intIn(0, 100000) },
   { key: "GROQ_CHAT_MODEL", section: "ai", label: "Chat & Generation AI Model", description: "Groq model used for AI Chatbot, Proposals, Contracts & Email Templates", type: "select", options: [], default: "llama-3.1-8b-instant", schema: modelId },
   { key: "GROQ_EXTRACT_MODEL", section: "ai", label: "Extraction AI Model", description: "Groq model used for fast structured JSON field extraction", type: "select", options: [], default: "llama-3.1-8b-instant", schema: modelId },
   { key: "GROQ_CHAT_TEMPERATURE", section: "ai", label: "Chat Temperature", description: "Creativity index (0.0 to 1.0)", type: "number", default: "0.7", schema: decimalIn(0, 2) },

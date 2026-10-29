@@ -600,6 +600,8 @@ Not to be confused with "clients" as in people — this is for displaying client
 
 ---
 
+**Cost controls.** Every Groq call (chat, proposal/contract drafting, extraction, email templates) is metered: token use goes into a daily counter in MongoDB (shared by all instances, survives restarts) and an `AiUsage` row per call (kept 90 days). When the day's tokens reach `AI_DAILY_TOKEN_BUDGET` (Settings → AI, default 500,000; 0 = no limit), AI calls return `429 AI_BUDGET_EXCEEDED` until midnight UTC. The public chatbot also allows `CHAT_DAILY_PER_IP` messages per visitor per day (default 60) → `429 CHAT_DAILY_LIMIT`. The admin dashboard shows today's usage against the budget; `GET /v1/admin/ai-usage?days=7` has the per-day, per-operation breakdown.
+
 ### 4.18 Notifications System
 
 The platform has no in-app notification bell. All notifications are delivered via email (Resend). See [Section 10](#10-email--notification-system) for all email templates and their triggers.
@@ -2082,7 +2084,7 @@ On `SIGTERM`/`SIGINT` the API fails `/ready`, stops the cron jobs, finishes in-f
 | API error rate | `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.02` |
 | Not ready | `/ready` failing for more than 2 minutes (uptime monitor, every minute) |
 | Stripe webhooks failing | `increase(stripe_webhook_events_total{result=~"invalid\|retry"}[15m]) > 0` — also check the Stripe dashboard's webhook page |
-| Groq spend | `increase(groq_requests_total[24h]) > <your daily budget>` |
+| Groq spend | The API enforces `AI_DAILY_TOKEN_BUDGET` itself (429 `AI_BUDGET_EXCEEDED` until midnight UTC); alert on `increase(groq_requests_total{result="error"}[1h]) > 10` and watch the dashboard's AI usage card |
 | Email failures | `increase(email_send_total{result="error"}[30m]) > 5` |
 | Latency | `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 2` |
 
