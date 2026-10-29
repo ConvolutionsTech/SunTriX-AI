@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { validate, InvoiceCreateSchema } from "../middleware/validate";
 import { logAudit } from "../lib/audit";
 import { AppError } from "../shared/errors/appError";
+import Payment from "../models/Payment";
 
 const router = Router();
 
@@ -22,6 +23,37 @@ router.post("/invoice/:token/checkout", async (req: Request, res: Response, next
   try {
     const checkoutUrl = await paymentService.processInvoiceCheckout(req.params.token);
     res.json({ checkoutUrl });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /payments/admin/list — newest first (capped)
+router.get("/admin/list", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payments = await Payment.find().sort({ createdAt: -1 }).limit(500).lean();
+    res.json({ payments });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /payments/admin/stats — totals in cents
+router.get("/admin/stats", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const [paid, refunded, month, pendingCount] = await Promise.all([
+      Payment.aggregate([{ $match: { status: "paid" } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Payment.aggregate([{ $match: { status: "refunded" } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Payment.aggregate([{ $match: { status: "paid", paidAt: { $gte: monthStart } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Payment.countDocuments({ status: "pending" }),
+    ]);
+    res.json({
+      totalRevenueCents: paid[0]?.total ?? 0,
+      refundedCents: refunded[0]?.total ?? 0,
+      thisMonthCents: month[0]?.total ?? 0,
+      pendingCount,
+    });
   } catch (err) {
     next(err);
   }
