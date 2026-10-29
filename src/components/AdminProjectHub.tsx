@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { apiRequest, ENDPOINTS } from "../lib/api";
 import { authManager } from "@/lib/auth";
 import { toast } from "react-hot-toast";
+import { safeHref } from "@/lib/sanitize";
 import {
   CheckCircle2, Clock, Send, Upload, FileText,
   Eye, ExternalLink, ChevronRight, Flag, Zap,
@@ -428,7 +429,7 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
                                 </div>
                               )}
                               {d.attachedUrl && (
-                                <a href={d.attachedUrl} target="_blank" rel="noreferrer"
+                                <a href={safeHref(d.attachedUrl)} target="_blank" rel="noreferrer"
                                   className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
                                   <Eye className="h-3 w-3" /> View Attachment
                                 </a>
@@ -639,7 +640,7 @@ const AdminProjectHub = ({ taskId }: AdminProjectHubProps) => {
                           f.approvalStatus === "Rejected" ? "bg-rose-500/10 text-rose-400 border-rose-500/30" :
                           "bg-amber-500/10 text-amber-400 border-amber-500/30"
                         }`}>{f.approvalStatus}</span>
-                        <a href={f.cloudinaryUrl} target="_blank" rel="noreferrer"
+                        <a href={safeHref(f.cloudinaryUrl)} target="_blank" rel="noreferrer"
                           className="h-8 w-8 rounded-lg bg-muted/50 hover:bg-primary hover:text-white text-muted-foreground flex items-center justify-center transition-all">
                           <Eye className="h-3.5 w-3.5" />
                         </a>

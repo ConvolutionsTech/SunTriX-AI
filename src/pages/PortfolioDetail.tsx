@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, ArrowRight, ChevronLeft, ChevronRight, Play } f
 import Layout from "@/components/Layout";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { PortfolioDetailSkeleton } from "@/components/skeletons";
+import { safeHref } from "@/lib/sanitize";
 
 const GallerySlider = ({ images }: { images: string[] }) => {
   const [current, setCurrent] = useState(0);
@@ -130,7 +131,7 @@ const PortfolioDetail = () => {
 
               {project.liveUrl && (
                 <a
-                  href={project.liveUrl}
+                  href={safeHref(project.liveUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="gradient-bg inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-sm font-bold text-primary-foreground hover:shadow-[0_0_30px_hsl(24_100%_50%/0.3)] transition-all"

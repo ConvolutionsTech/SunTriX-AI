@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, FileText, Film, Image, Loader2, File } from "lucide-react";
 import { ENDPOINTS } from "@/lib/api";
 import { authManager } from "@/lib/auth";
+import { safeHref } from "@/lib/sanitize";
 
 export interface MediaAttachment {
   url: string;
@@ -212,7 +213,7 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
                 )}
                 {att.type === "document" && (
                   <a
-                    href={att.url}
+                    href={safeHref(att.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex flex-col items-center justify-center h-24 gap-2 hover:bg-muted/60 transition-colors"

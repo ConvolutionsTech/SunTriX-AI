@@ -12,6 +12,7 @@ import {
   Rocket,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { safeHref } from "@/lib/sanitize";
 
 interface VerifyResult {
   status: string;
@@ -171,7 +172,7 @@ const PaymentSuccess = () => {
 
                   {result.receiptUrl && (
                     <a
-                      href={result.receiptUrl}
+                      href={safeHref(result.receiptUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1 rounded-xl border border-border py-3 text-center text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"

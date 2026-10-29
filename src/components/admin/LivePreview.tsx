@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Monitor, ExternalLink, ArrowRight, Play, Star } from "lucide-react";
+import { safeHref } from "@/lib/sanitize";
 
 // ─── Types ────────────────────────────────────────────────────────
 interface PortfolioPreviewData {
@@ -286,7 +287,7 @@ const LivePreview = ({ data, onClose }: LivePreviewProps) => {
 
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-[10px] font-mono text-muted-foreground mb-1.5">Route Preview</p>
-                  <a href={data.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                  <a href={safeHref(data.href)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                     {data.href || "/services/..."} <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>

@@ -6,6 +6,7 @@ import { toast } from "@/hooks/use-toast";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { useSEO } from "@/hooks/useSEO";
+import { safeHref } from "@/lib/sanitize";
 
 
 const Contact = () => {
@@ -120,7 +121,7 @@ const Contact = () => {
                   <div>
                     <p className="text-sm font-medium text-foreground">{item.title}</p>
                     {item.link ? (
-                      <a href={item.link} className="text-sm text-primary hover:underline">{item.value}</a>
+                      <a href={safeHref(item.link)} className="text-sm text-primary hover:underline">{item.value}</a>
                     ) : (
                       <p className="text-sm text-muted-foreground">{item.value}</p>
                     )}

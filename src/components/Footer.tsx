@@ -7,6 +7,7 @@ import { toast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useMedia } from "@/hooks/use-media";
 import { SocialIconSVG, PLATFORM_BRAND } from "@/components/SocialIcons";
+import { safeHref } from "@/lib/sanitize";
 
 const Footer = () => {
   const [name, setName] = useState("");
@@ -84,7 +85,7 @@ const Footer = () => {
                 const brand = PLATFORM_BRAND[link.platform];
                 const icon = SocialIconSVG[link.platform];
                 return (
-                  <a key={link.platform} href={link.url} target="_blank" rel="noopener noreferrer"
+                  <a key={link.platform} href={safeHref(link.url)} target="_blank" rel="noopener noreferrer"
                     title={link.platform}
                     className={`h-9 w-9 rounded-lg border border-border bg-muted/30 flex items-center justify-center transition-all ${brand?.bg || "hover:bg-primary/10"} ${brand?.border || "hover:border-primary/30"}`}
                     style={{ color: brand?.color }}

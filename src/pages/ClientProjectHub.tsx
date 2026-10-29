@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { toast } from "react-hot-toast";
+import { safeHref } from "@/lib/sanitize";
 
 const phases = ["Discovery", "Design", "Development", "Testing", "Delivery"];
 
@@ -379,7 +380,7 @@ const ClientProjectHub = () => {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {d.attachedUrl && (
-                      <a href={d.attachedUrl} target="_blank" rel="noreferrer"
+                      <a href={safeHref(d.attachedUrl)} target="_blank" rel="noreferrer"
                         className="flex items-center gap-1 text-sm text-primary hover:underline border border-primary/30 px-3 py-1.5 rounded-lg">
                         <ExternalLink className="h-3.5 w-3.5" /> View Work
                       </a>
@@ -429,7 +430,7 @@ const ClientProjectHub = () => {
                       <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-lg italic">"{f.clientComment}"</p>
                     )}
                     <div className="flex items-center gap-2">
-                      <a href={f.cloudinaryUrl} target="_blank" rel="noreferrer"
+                      <a href={safeHref(f.cloudinaryUrl)} target="_blank" rel="noreferrer"
                         className="flex-1 text-center text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-primary/5">
                         View / Download
                       </a>

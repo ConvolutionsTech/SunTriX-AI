@@ -8,6 +8,7 @@ import { useMedia } from "@/hooks/use-media";
 import { useSEO } from "@/hooks/useSEO";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { useCompanyInfo } from "@/hooks/useCompanyInfo";
+import { safeHref } from "@/lib/sanitize";
 
 const values = [
   { icon: Target, title: "Outcome-Driven", desc: "Every project is measured by business impact, not just technical delivery." },
@@ -183,10 +184,10 @@ const About = () => {
                     
                     {(member.linkedin || member.twitter || member.github || member.website) && (
                       <div className="flex items-center justify-center gap-3 pt-5 border-t border-border/50 w-full mt-auto">
-                        {member.linkedin && <a href={member.linkedin} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Linkedin className="h-4 w-4" /></a>}
-                        {member.twitter && <a href={member.twitter} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Twitter className="h-4 w-4" /></a>}
-                        {member.github && <a href={member.github} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Github className="h-4 w-4" /></a>}
-                        {member.website && <a href={member.website} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Globe className="h-4 w-4" /></a>}
+                        {member.linkedin && <a href={safeHref(member.linkedin)} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Linkedin className="h-4 w-4" /></a>}
+                        {member.twitter && <a href={safeHref(member.twitter)} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Twitter className="h-4 w-4" /></a>}
+                        {member.github && <a href={safeHref(member.github)} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Github className="h-4 w-4" /></a>}
+                        {member.website && <a href={safeHref(member.website)} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-background border border-border text-muted-foreground hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 hover:scale-110 shadow-sm"><Globe className="h-4 w-4" /></a>}
                       </div>
                     )}
                   </div>

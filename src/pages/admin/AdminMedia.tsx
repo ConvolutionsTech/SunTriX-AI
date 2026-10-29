@@ -4,6 +4,7 @@ import { apiRequest, ENDPOINTS } from "@/lib/api";
 import { authManager } from "@/lib/auth";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
+import { safeHref } from "@/lib/sanitize";
 import {
   Upload, Trash2, Search, Copy, Check, Image, Film, FileText,
   Grid3X3, List, X, ExternalLink, Eye, ArrowUpDown, Filter,
@@ -455,7 +456,7 @@ export const AdminMedia = () => {
                       {copiedId === asset._id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
                     <a
-                      href={asset.url}
+                      href={safeHref(asset.url)}
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -658,7 +659,7 @@ export const AdminMedia = () => {
                 </button>
 
                 <a
-                  href={selectedAsset.url}
+                  href={safeHref(selectedAsset.url)}
                   target="_blank"
                   rel="noreferrer"
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border/60 bg-background text-foreground text-xs font-semibold hover:bg-muted transition-all"
