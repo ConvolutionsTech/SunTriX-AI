@@ -7,11 +7,12 @@ import { escapeHtml } from "../lib/escapeHtml";
 import { logAudit } from "../lib/audit";
 import { sendContactNotification } from "../services/email";
 import { logger } from "../lib/logger";
+import { formLimiter } from "../middleware/rateLimiters";
 
 const router = Router();
 
 // POST /contact — public
-router.post("/", validate(ContactSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", formLimiter(), validate(ContactSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, message, company, subject } = req.body;
     // No need for manual required checks — Zod validate() handles them above

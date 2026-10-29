@@ -89,6 +89,7 @@ export const SETTINGS_REGISTRY: SettingDef[] = [
   // ─── Security & operations ──────────────────────────────────────
   { key: "MAINTENANCE_MODE", section: "security", label: "Maintenance Mode", description: "Public site returns 503; admin and client links keep working", type: "toggle", default: "false", schema: toggle },
   { key: "RATE_LIMIT_MAX", section: "security", label: "Requests per 15 min per IP", type: "number", default: "", schema: intIn(50, 100000) },
+  { key: "RATE_LIMIT_AUTH_MAX", section: "security", label: "Sign-in attempts per 15 min per IP", description: "Login, forgot-password and reset", type: "number", default: "", schema: intIn(3, 100) },
   { key: "RATE_LIMIT_CONTACT", section: "security", label: "Form submissions per hour per IP", type: "number", default: "", schema: intIn(1, 1000) },
   { key: "RATE_LIMIT_CHAT", section: "security", label: "Chat messages per minute per IP", type: "number", default: "", schema: intIn(1, 1000) },
   { key: "AUDIT_LOG_RETENTION_DAYS", section: "security", label: "Audit Log Retention (days)", type: "number", default: "", schema: intIn(7, 3650) },

@@ -8,6 +8,7 @@ import { getSetting } from "../lib/configLoader";
 import { sendNewsletterConfirmationEmail, sendNewsletterWelcomeEmail, BroadcastRecipient } from "../services/email";
 import { validate, NewsletterSubscribeSchema, NewsletterBroadcastSchema } from "../middleware/validate";
 import { logger } from "../lib/logger";
+import { formLimiter } from "../middleware/rateLimiters";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ const router = Router();
 // The response never reveals whether the address is already on the list, and an
 // address is only marked subscribed by its owner (confirmation click) when
 // double opt-in is on.
-router.post("/", validate(NewsletterSubscribeSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", formLimiter(), validate(NewsletterSubscribeSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, interest } = req.body;
     const doubleOptIn = getSetting("NEWSLETTER_DOUBLE_OPTIN", "false") === "true";

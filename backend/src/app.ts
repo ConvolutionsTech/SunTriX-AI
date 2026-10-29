@@ -6,7 +6,7 @@ import helmet from "helmet";
 import { logger, httpLogger } from "./lib/logger";
 import { initSentry } from "./lib/sentry";
 import { metricsMiddleware, metricsHandler } from "./lib/metrics";
-import rateLimit from "express-rate-limit";
+import { globalLimiter, authLimiter, chatLimiter } from "./middleware/rateLimiters";
 import mongoSanitize from "express-mongo-sanitize";
 import { connectDB } from "./config/db";
 import { validateEnv } from "./config/env";
@@ -78,46 +78,7 @@ app.use(
 );
 
 // ─── Rate Limiting ───────────────────────────────────────────────
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_MAX", "500")),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many requests, please try again later." },
-  // Orchestrator probes must never be throttled
-  skip: (req) => req.path === "/health" || req.path === "/ready" || req.path === "/metrics",
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 5, // 5 login attempts per 15 min per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many attempts. Please try again in 15 minutes." },
-  // Express routing is case-insensitive and ignores a trailing slash, so normalise
-  // the same way — otherwise /login/ or /LOGIN would bypass the limit
-  skip: (req) => {
-    if (req.method !== "POST") return true;
-    const path = req.path.toLowerCase().replace(/\/+$/, "");
-    return !(path === "/login" || path === "/forgot" || path.startsWith("/reset/"));
-  },
-});
-
-const formLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_CONTACT", "5")),
-  message: { error: "Too many submissions. Please try again in an hour." },
-  // Public form submissions only (POST / on each router) — admin actions on the
-  // same routers (replies, campaigns) must not share the 5-per-hour budget
-  skip: (req) => req.method !== "POST" || req.path !== "/",
-});
-
-const chatLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: (_req, _res) => parseInt(getSetting("RATE_LIMIT_CHAT", "10")),
-  message: { error: "Chat rate limit exceeded. Please wait a moment." },
-});
-
+// See middleware/rateLimiters.ts (auth, form and chat limits are mounted per route)
 app.use(globalLimiter);
 
 // ─── Maintenance Mode ────────────────────────────────────────────
@@ -205,9 +166,9 @@ app.use(`${V1}/auth`, authLimiter, authRoutes);
 app.use(`${V1}/portfolio`, portfolioRoutes);
 app.use(`${V1}/case-studies`, caseStudyRoutes);
 app.use(`${V1}/testimonials`, testimonialRoutes);
-app.use(`${V1}/task-requests`, formLimiter, taskRequestRoutes);
-app.use(`${V1}/contact`, formLimiter, contactRoutes);
-app.use(`${V1}/newsletter`, formLimiter, newsletterRoutes);
+app.use(`${V1}/task-requests`, taskRequestRoutes);
+app.use(`${V1}/contact`, contactRoutes);
+app.use(`${V1}/newsletter`, newsletterRoutes);
 app.use(`${V1}/chat`, chatLimiter, chatRoutes);
 app.use(`${V1}/cms`, cmsRoutes);
 app.use(`${V1}/departments`, departmentRoutes);

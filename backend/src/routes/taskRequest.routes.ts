@@ -4,12 +4,13 @@ import { writable } from "../middleware/bodyPolicy";
 import { taskRequestService } from "../modules/task-requests/task-request.service";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate, TaskRequestSchema } from "../middleware/validate";
+import { formLimiter } from "../middleware/rateLimiters";
 import { logAudit } from "../lib/audit";
 
 const router = Router();
 
 // POST /task-requests — public submission
-router.post("/", validate(TaskRequestSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", formLimiter(), validate(TaskRequestSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await taskRequestService.submitRequest(req.body);
     res.status(201).json({
