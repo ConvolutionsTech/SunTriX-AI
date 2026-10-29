@@ -2,13 +2,17 @@ import Stripe from "stripe";
 import { getSetting } from "../../lib/configLoader";
 import { AppError, ERROR_CODES } from "../../shared/errors/appError";
 
+const STRIPE_API_VERSION = "2025-02-24.acacia";
+
 export class StripeAdapter {
   getClient(): InstanceType<typeof Stripe> {
     const secretKey = getSetting("STRIPE_SECRET_KEY");
     if (!secretKey) {
       throw new AppError("Stripe is not configured (STRIPE_SECRET_KEY missing)", ERROR_CODES.INTERNAL_SERVER_ERROR);
     }
-    return new Stripe(secretKey, { apiVersion: "2025-02-24.acacia" as any });
+    // Pinned on purpose: the SDK (v22) defaults to a newer API version, and moving
+    // to it is a behaviour change to test against Stripe first (see PlatformDocumentation §11.1).
+    return new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION as NonNullable<ConstructorParameters<typeof Stripe>[1]>["apiVersion"] });
   }
 
   async constructWebhookEvent(payload: string | Buffer, signature: string): Promise<any> {
