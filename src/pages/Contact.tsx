@@ -4,16 +4,8 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { useSEO } from "@/hooks/useSEO";
-
-interface CompanyInfo {
-  email?: string;
-  phone?: string;
-  address?: string;
-  responseTime?: string;
-  name?: string;
-  tagline?: string;
-}
 
 
 const Contact = () => {
@@ -25,14 +17,8 @@ const Contact = () => {
 
   const [form, setForm] = useState({ name: "", email: "", company: "", subject: "", message: "" });
   const [loading, setLoading] = useState(false);
-  const [company, setCompany] = useState<CompanyInfo>({});
-
-  // Fetch company info from CMS — email, phone, address, response time
-  useEffect(() => {
-    apiRequest<{ data: CompanyInfo }>(ENDPOINTS.CMS_COMPANY)
-      .then(({ data }) => { if (data?.data) setCompany(data.data); })
-      .catch(() => {});
-  }, []);
+  // Company info from CMS — email, phone, address, response time
+  const company = useCompanyInfo();
 
 
   const handleSubmit = async (e: React.FormEvent) => {

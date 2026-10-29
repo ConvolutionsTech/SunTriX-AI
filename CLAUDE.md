@@ -16,6 +16,7 @@ Frontend (run from repo root):
 npm run dev            # Vite dev server on port 8080 (backend CORS only allows FRONTEND_URL + :5173/:3000 — set FRONTEND_URL accordingly)
 npm run build          # production build
 npm run lint           # eslint
+npm run typecheck      # tsc for the app + strict check of src/lib (vite build does NOT type-check)
 npm test               # vitest run (jsdom, src/**/*.test.ts(x))
 npx vitest run src/test/example.test.ts   # single test file
 ```
@@ -58,6 +59,7 @@ Notes:
 - `src/App.tsx` defines all routes: public marketing pages, client token pages (`/proposal/:token`, `/contract/:token`, `/invoice/:token`, `/track/:token`), payment success/cancel, and `/admin/*` (wrapped in `AdminLayout`).
 - `src/lib/api.ts` is the single source of backend endpoints (`ENDPOINTS`) and the `apiRequest<T>()` helper returning `{ data, error }`. Add new endpoints here.
 - Data fetching uses TanStack Query; domain hooks live in `src/features/<domain>/hooks/` (e.g. `useTasks`, `useProposals`, `useSettings`).
+- Company profile (name, tagline, email, …) comes from `useCompanyInfo()` (`src/hooks/useCompanyInfo.ts`). `GET /cms/company` returns the fields flat — never read `data.data`.
 - Auth: `src/lib/auth.ts` `AuthManager` stores the JWT in localStorage (`suntrix_auth_token`).
 - `src/lib/store.ts` is a deprecated empty stub and `src/lib/cms-store.ts` is the legacy localStorage CMS (mostly superseded by the API) — don't build new features on them. The README's "localStorage" backend-integration section is outdated for the same reason.
 - `@/` alias → `src/`. `src/components/ui/` are generated shadcn primitives (`components.json`); admin-specific shared components are in `src/components/admin/`.

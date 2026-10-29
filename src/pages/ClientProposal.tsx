@@ -6,6 +6,7 @@ import {
   ChevronRight, ChevronDown, ChevronUp, MessageSquare, ArrowRight,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 interface Milestone {
   title: string;
@@ -65,7 +66,7 @@ const ClientProposal = () => {
   const [changeNote, setChangeNote] = useState("");
   const [submittingChange, setSubmittingChange] = useState(false);
   const [showFullTerms, setShowFullTerms] = useState(false);
-  const [companyName, setCompanyName] = useState("SunTriX AI Solutions");
+  const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
     if (!token) { setError("Invalid proposal link."); setLoading(false); return; }
@@ -80,12 +81,7 @@ const ClientProposal = () => {
         }
     };
     
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data?.name) setCompanyName(data.data.name);
-    };
-
-    Promise.all([fetchProposal(), fetchCompany()]).finally(() => setLoading(false));
+    fetchProposal().finally(() => setLoading(false));
   }, [token]);
 
   const handleAccept = async () => {

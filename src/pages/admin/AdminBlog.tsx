@@ -129,9 +129,16 @@ const AdminBlog = () => {
     setShowForm(true);
   };
 
-  const openEdit = (p: BlogPost) => {
+  // The list endpoint omits `content`, so load the full post before editing —
+  // otherwise saving would overwrite the article body with an empty value.
+  const openEdit = async (listItem: BlogPost) => {
+    const { data: p, error } = await apiRequest<BlogPost>(ENDPOINTS.BLOG_BY_ID(listItem._id));
+    if (error || !p) {
+      alert(`Could not load this post for editing: ${error || "not found"}`);
+      return;
+    }
     setEditing(p);
-    setForm({ title: p.title, slug: p.slug, excerpt: p.excerpt, content: p.content, coverImage: p.coverImage || "", tags: p.tags, category: p.category, status: p.status, scheduledAt: p.scheduledAt || "", publishedAt: p.publishedAt || "", author: p.author || "", readTime: p.readTime || 5, mediaAttachments: p.mediaAttachments || [] });
+    setForm({ title: p.title, slug: p.slug, excerpt: p.excerpt, content: p.content || "", coverImage: p.coverImage || "", tags: p.tags, category: p.category, status: p.status, scheduledAt: p.scheduledAt || "", publishedAt: p.publishedAt || "", author: p.author || "", readTime: p.readTime || 5, mediaAttachments: p.mediaAttachments || [] });
     setTagInput(p.tags.join(", "));
     setShowForm(true);
   };
@@ -220,13 +227,13 @@ const AdminBlog = () => {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { handleOpen(); setAiMode(true); }}
+              onClick={() => { openCreate(); setAiMode(true); }}
               className="px-3.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-xs font-semibold text-purple-400 hover:bg-purple-500/20 transition-all inline-flex items-center gap-1.5"
             >
               <span>✨</span> AI Article Drafter
             </button>
             <button
-              onClick={() => { handleOpen(); setAiMode(false); }}
+              onClick={() => { openCreate(); setAiMode(false); }}
               className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-xs hover:bg-primary/90 transition-all inline-flex items-center gap-1.5"
             >
               <Plus className="h-3.5 w-3.5" /> Write Post
@@ -325,9 +332,9 @@ const AdminBlog = () => {
                   </td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(post)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><Edit2 className="h-4 w-4" /></button>
-                      <button onClick={() => handleClone(post)} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
-                      <button onClick={() => handleDelete(post._id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => openEdit(post)} aria-label="Edit post" title="Edit" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><Edit2 className="h-4 w-4" /></button>
+                      <button onClick={() => handleClone(post)} aria-label="Duplicate post" title="Duplicate" className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"><Copy className="h-4 w-4" /></button>
+                      <button onClick={() => handleDelete(post._id)} aria-label="Delete post" title="Delete" className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </motion.tr>

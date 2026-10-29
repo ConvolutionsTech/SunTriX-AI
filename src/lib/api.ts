@@ -171,6 +171,7 @@ export const ENDPOINTS = {
   // Blog / Posts
   BLOG_LIST: `${BASE_URL}/posts`,
   BLOG_BY_SLUG: (slug: string) => `${BASE_URL}/posts/slug/${slug}`,
+  BLOG_BY_ID: (id: string) => `${BASE_URL}/posts/${id}`,
   BLOG_CREATE: `${BASE_URL}/posts`,
   BLOG_UPDATE: (id: string) => `${BASE_URL}/posts/${id}`,
   BLOG_DELETE: (id: string) => `${BASE_URL}/posts/${id}`,

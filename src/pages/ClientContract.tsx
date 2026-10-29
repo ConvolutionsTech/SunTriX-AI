@@ -5,6 +5,7 @@ import {
   ScrollText, CheckCircle, AlertTriangle, Loader2, PenLine, Lock,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 interface Contract {
   _id: string;
@@ -30,7 +31,7 @@ const ClientContract = () => {
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
   const [trackingToken, setTrackingToken] = useState("");
-  const [companyName, setCompanyName] = useState("SunTriX AI Solutions");
+  const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
     if (!token) { setError("Invalid contract link."); setLoading(false); return; }
@@ -47,12 +48,7 @@ const ClientContract = () => {
       }
     };
 
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data?.name) setCompanyName(data.data.name);
-    };
-
-    Promise.all([fetchContract(), fetchCompany()]).finally(() => setLoading(false));
+    fetchContract().finally(() => setLoading(false));
   }, [token]);
 
   const handleSign = async () => {

@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 interface InvoiceData {
   _id: string;
@@ -38,7 +39,7 @@ const ClientInvoice = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
-  const [companyName, setCompanyName] = useState("SunTriX AI Solutions");
+  const companyName = useCompanyInfo().name || "SunTriX AI Solutions";
 
   useEffect(() => {
     if (!token) {
@@ -53,12 +54,7 @@ const ClientInvoice = () => {
       else setInvoice(data);
     };
     
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data?.name) setCompanyName(data.data.name);
-    };
-
-    Promise.all([fetchInvoice(), fetchCompany()]).finally(() => setLoading(false));
+    fetchInvoice().finally(() => setLoading(false));
   }, [token]);
 
   const fmt = (cents: number, currency = "usd") =>

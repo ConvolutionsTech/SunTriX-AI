@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Mail } from "lucide-react";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 import { toast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useMedia } from "@/hooks/use-media";
@@ -14,16 +15,12 @@ const Footer = () => {
   const { t } = useI18n();
   const suntrixLogo = useMedia("suntrix-logo");
   const [socialLinks, setSocialLinks] = useState<{platform: string, url: string, enabled: boolean}[]>([]);
-  const [companyInfo, setCompanyInfo] = useState<{ name?: string; tagline?: string }>({});
+  const companyInfo = useCompanyInfo();
 
   useEffect(() => {
     // Fetch social links
     apiRequest<{links: {platform: string, url: string, enabled: boolean}[]}>(ENDPOINTS.CMS_SOCIAL_LINKS).then(({ data }) => {
       if (data && data.links) setSocialLinks(data.links);
-    });
-    // Fetch company name + tagline for copyright and footer description
-    apiRequest<{ data: { name?: string; tagline?: string } }>(ENDPOINTS.CMS_COMPANY).then(({ data }) => {
-      if (data?.data) setCompanyInfo(data.data);
     });
   }, []);
 

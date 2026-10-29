@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { useMedia } from "@/hooks/use-media";
 import { useSEO } from "@/hooks/useSEO";
 import { apiRequest, ENDPOINTS } from "@/lib/api";
+import { useCompanyInfo } from "@/hooks/useCompanyInfo";
 
 const values = [
   { icon: Target, title: "Outcome-Driven", desc: "Every project is measured by business impact, not just technical delivery." },
@@ -20,21 +21,15 @@ const values = [
 const About = () => {
   const [team, setTeam] = useState<any[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
-  const [companyInfo, setCompanyInfo] = useState<{ description?: string; tagline?: string; name?: string }>({});
+  const companyInfo = useCompanyInfo();
 
   useEffect(() => {
-    // Fetch team + company info in parallel
     const fetchTeam = async () => {
       const { data } = await apiRequest<any[]>(ENDPOINTS.TEAM_LIST);
       if (data) setTeam(data);
       setLoadingTeam(false);
     };
-    const fetchCompany = async () => {
-      const { data } = await apiRequest<{ data: { description?: string; tagline?: string; name?: string } }>(ENDPOINTS.CMS_COMPANY);
-      if (data?.data) setCompanyInfo(data.data);
-    };
     fetchTeam();
-    fetchCompany();
   }, []);
 
   useSEO({

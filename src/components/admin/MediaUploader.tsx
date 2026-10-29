@@ -57,7 +57,7 @@ export const MediaUploader = ({ value, onChange, maxItems = 20 }: MediaUploaderP
     const token = localStorage.getItem("auth_token");
     const type = getFileType(file.name);
 
-    let endpoint = ENDPOINTS.UPLOAD_IMAGE;
+    let endpoint: string = ENDPOINTS.UPLOAD_IMAGE;
     if (type === "video") endpoint = ENDPOINTS.UPLOAD_VIDEO;
     else if (type === "document") endpoint = ENDPOINTS.UPLOAD_DOCUMENT;
 

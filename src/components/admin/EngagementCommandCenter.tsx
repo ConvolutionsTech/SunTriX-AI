@@ -24,7 +24,7 @@ interface TaskRequestItem {
   contractToken?: string;
   contractSignedAt?: string;
   trackingToken?: string;
-  statusHistory?: Array<{ status: string; timestamp: string; note?: string }>;
+  statusHistory?: Array<{ status: string; updatedAt?: string; note?: string }>;
   createdAt: string;
 }
 
