@@ -10,6 +10,7 @@ import { connectDB } from "./config/db";
 import { validateEnv } from "./config/env";
 import { parseTrustProxy } from "./lib/trustProxy";
 import { errorHandler } from "./middleware/errorHandler";
+import { AppError } from "./shared/errors/appError";
 
 // Route imports
 import authRoutes from "./routes/auth.routes";
@@ -59,7 +60,7 @@ app.use(
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS: origin ${origin} not allowed`));
+      callback(new AppError(`CORS: origin ${origin} not allowed`, 403, "CORS"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],

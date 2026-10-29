@@ -103,9 +103,9 @@ router.post("/webhook", async (req: Request, res: Response) => {
     // Bad signature/payload → 400 (not retried). Anything else — misconfiguration,
     // database or post-payment failures — → 500 so Stripe retries the event.
     if (err instanceof AppError && err.statusCode === 400) {
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+      return res.status(400).json({ error: err.message, code: "WEBHOOK_INVALID" });
     }
-    res.status(500).send("Webhook Error: processing failed, will retry");
+    res.status(500).json({ error: "Webhook processing failed — Stripe will retry", code: "WEBHOOK_RETRY" });
   }
 });
 
